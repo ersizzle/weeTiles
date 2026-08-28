@@ -149,3 +149,19 @@ Only `file` is required.
   Selected always works regardless.
 - **Web server refuses .fbx** — some hosts only serve known extensions; add the MIME
   type `application/octet-stream` for `.fbx`.
+
+## 5. Development
+
+The pattern maths and the library/cache code have no Maya dependency, so they are
+tested outside it — no Maya, no Qt, no network needed (it spins up a local server):
+
+```bash
+python tests/test_logic.py
+```
+
+The important one is the coverage test: it samples thousands of interior points and
+asserts **exactly one** tile covers each, which is what proves the herringbone lattice
+is right. Run it after touching `_wtLayout` or anything under the library banner.
+
+Not covered, because they need a running Maya: the Qt widgets, `mc.file` import,
+the viewport drop hook, and the boolean trim.
