@@ -1,0 +1,15 @@
+# Claude Code local config / session data
+.claude/
+
+# Python cruft
+__pycache__/
+*.pyc
+
+# Never commit the tile models themselves - they are hosted, not versioned
+tiles/
+thumbs/
+textures/
+library.json
+*.fbx
+*.mb
+*.ma
