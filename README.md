@@ -7,6 +7,10 @@ so both can be loaded in Maya at the same time without colliding.
 Browse the Serapool tile models as thumbnails, drag one into the viewport, or fill
 a floor with grid / running bond / herringbone in one click.
 
+> This repo also holds a second tool, **weeBuild** (`weeBuild.py`) - a button panel
+> that builds tiles procedurally and imports grate / coping models. It is documented
+> at the bottom of this file.
+
 ## Load it
 
 ```python
@@ -165,3 +169,73 @@ is right. Run it after touching `_wtLayout` or anything under the library banner
 
 Not covered, because they need a running Maya: the Qt widgets, `mc.file` import,
 the viewport drop hook, and the boolean trim.
+
+---
+
+# weeBuild — tile / grate / coping panel for Maya
+
+A second, independent tool in this repo (`weeBuild.py`). Where weeTiles browses a
+library of finished models, weeBuild is a weeScript-style dockable button panel that
+**builds** tiles from scratch and imports your grate and coping models.
+
+Its own file, its own panel, its own hotkey, and every global prefixed `wb`/`_wb` —
+weeScript, weeTiles and weeBuild can all be loaded in Maya at once.
+
+## Load it
+
+```python
+import urllib.request, __main__
+exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeBuild.py').read().decode('utf-8'), __main__.__dict__)
+```
+
+Opens the panel and registers **Alt+3** (weeTiles has Alt+2), which re-pulls the file
+and reopens it. To reopen without re-downloading, run `weeBuild()`.
+
+## Tiles
+
+One button per size — **33x66, 33x33, 16.5x66, 16.5x16.5, 11x33, 10x10, 5x5, 12.5x25**
+— plus **Custom size…** for anything else. Three fields above them:
+
+| Field | Default | What it does |
+| --- | --- | --- |
+| Count | 1 | How many master tiles to build, laid out in a row along X |
+| Thick | 0.76 | Tile thickness in cm (Y) |
+| Grout | 0.15 | Chamfer per top edge, so two tiles meet in a 0.3cm grout valley |
+
+Each tile is built exactly the way weeScript's *Build Tile* builds them: a box, the
+four top edges chamfered, the hidden bottom face deleted, planar-Y UVs rotated 90° so
+the texture runs along the long edge, and the pivot dropped to bottom centre. The long
+edge goes along X, the short one along Z.
+
+They are named `tile_<size>_<nn>_geo` — `tile_33x66_01_geo`, and because Maya node
+names cannot contain a dot, `tile_16p5x66_01_geo` for the half sizes. Numbering picks
+up from whatever is already in the scene, so pressing a button twice does not clash.
+
+Set Grout to `0` for a plain, unchamfered box.
+
+## Grates and Copings
+
+These import model files rather than building them. Point a section at a folder with
+the **…** button (remembered per Maya user), and you get one button per model file in
+it — `.ma`, `.mb`, `.fbx`, `.obj`. Add or remove files and press **Refresh**; no code
+change is needed.
+
+Clicking a button imports the file, keeps the top-level nodes that actually contain a
+mesh, renames them `<filename>_geo` and drops the pivot to bottom centre.
+
+Any folder works, including one inside this project — the repo's `.gitignore` already
+excludes `*.fbx` / `*.ma` / `*.mb`, so models dropped there will not be committed.
+
+Adding another section later (mosaics, steps, …) is one line: append to `WB_SECTIONS`.
+
+## Development
+
+Tested without Maya — `maya.cmds` is stubbed with a recorder and the whole file is
+exec'd, so opening the panel is covered too:
+
+```bash
+python tests/test_build_logic.py
+```
+
+Not covered, because they need a running Maya: the actual panel layout and what
+`polyBevel3` / `polyProjection` really produce.

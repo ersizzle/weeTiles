@@ -1,8 +1,15 @@
 # weeTiles — project context for Claude Code
 
-A single-file Maya tool (`weeTiles.py`, Python 3, PySide) that browses a tile-model
-library and imports/scatters the models. Built for the Serapool tile catalogue.
-Personal tool by the user (ersizzle). User-facing docs: `README.md`.
+Two independent single-file Maya tools (Python 3) for the Serapool tile catalogue.
+Personal tools by the user (ersizzle). User-facing docs: `README.md`.
+
+- **`weeTiles.py`** (PySide) — browses a tile-model library and imports/scatters the
+  models. Most of this file describes it.
+- **`weeBuild.py`** (native `cmds` UI) — a weeScript-style dockable button panel that
+  *builds* tiles procedurally and imports grate/coping models. See the weeBuild
+  section at the bottom.
+
+They share no code. Keep it that way: neither imports the other.
 
 **Sibling project, deliberately unrelated:** `weeScript` (`../WeeScript`) is the user's
 big shelf-panel tool. weeTiles was split out of it on purpose — do **not** add weeTiles
@@ -74,7 +81,7 @@ Format reference and hosting notes are in `README.md`.
 `WT_LIB_DEFAULT` is a placeholder address — the real one is whatever the user types into
 the browser's Library field (it persists in the optionVar).
 
-## Testing
+## Testing (weeTiles)
 
 The pure regions can be tested without Maya by exec'ing the slice between `WT_VERSION =`
 and `#  Maya side:` with a stubbed `mc` object (`optionVar`/`internalVar`/`warning`).
@@ -85,9 +92,79 @@ download/cache/`rev` busting, spaces in filenames, and settings round-trip.
 
 ## Verified in Maya
 
-Nothing yet — the tool was written and logic-tested outside Maya. Still unconfirmed:
-the Qt layout, `mc.file` import of the real FBX files, the viewport drop hook, and
-`_wtTrim`. Ask the user before assuming any of these work.
+Nothing yet — both tools were written and logic-tested outside Maya. Still unconfirmed
+for weeTiles: the Qt layout, `mc.file` import of the real FBX files, the viewport drop
+hook, and `_wtTrim`. For weeBuild: the panel layout and the real `polyBevel3` /
+`polyProjection` result. Ask the user before assuming any of these work.
+
+##############################################################################
+
+# weeBuild (`weeBuild.py`)
+
+A weeScript-style dockable button panel: **Tiles**, **Grates**, **Copings**.
+`buildTiles.py` in this folder is the weeScript excerpt it was built from — reference
+only, not loaded by anything.
+
+## How it loads / runs
+
+- Same exec-the-raw-file pattern as the others; `WB_SELF_URL` points at
+  `.../weeTiles/master/weeBuild.py`.
+- Bottom of the file calls `weeBuild()` and registers **Alt+3** (weeTiles owns Alt+2).
+- `weeBuild()` makes the `workspaceControl` whose `uiScript` is `'wbUI()'`, so **`wbUI`
+  must stay a module-level name in `__main__`** and must be re-runnable — Maya calls it
+  again whenever it restores the panel. It rebuilds `_wbFields` / `_wbCols` each time.
+
+## Conventions (IMPORTANT — same spirit as weeTiles)
+
+- **Indentation is TABS.**
+- **Every global is prefixed `wb` / `_wb` / `WB_`.** Three tools now share Maya's
+  `__main__`; only `mc`, `mel` and `os` are (deliberately) common.
+- Button commands are **Python callables**, not `eval`'d strings — model paths contain
+  spaces and backslashes. They all go through `_wbGuard`, which turns an exception into
+  `mc.warning` instead of a traceback.
+- **`_wbSafe` exists because Maya node names take no dots.** A decimal point becomes
+  `p` (`16.5x66` → `16p5x66`), so half the presets would otherwise make illegal names.
+  `fragment=True` skips the leading-digit `_` for tokens that sit inside a longer name.
+- After ANY edit: `python3 -c "import ast; ast.parse(open('weeBuild.py').read())"` and
+  `python tests/test_build_logic.py`.
+
+## Architecture
+
+Regions in file order, marked with banner comments:
+
+1. **settings** — `_wbGetSettings`/`_wbSaveSettings` (optionVar `weeBuildSettings`,
+   JSON), `_wbFolder`/`_wbSetFolder` per model section.
+2. **helpers** — `_wbGuard`, `_wbSafe`/`_wbToken`, `_wbUnique` (lowest free `%02d`),
+   `_wbBottomPivot`, `_wbWrap` (button labels), `_wbNum` (reads a panel field, falls
+   back to the default when the panel is shut).
+3. **tiles** — `_wbFaceCenterY` + `_wbBuildTile` are **weeScript's `_buildTile` verbatim**
+   (box → chamfer the 4 top edges → delete the bottom face → planar-Y UVs rotated 90°
+   → pivot to bottom centre; thickness 0.76, grout 0.15). Do not "improve" the recipe —
+   it is proven in the user's pipeline. Geometry still straddles Y=0, as in weeScript;
+   only the pivot goes to the bottom. `wbTile` is the scriptable entry point; presets
+   live in `WB_TILES` as `(label, short, long)` — **long edge along X, short along Z**.
+4. **models** — `_wbModelFiles`, `wbImport` (ported from weeTiles' `_wtImportOne`: diff
+   `mc.ls(assemblies=True)`, keep roots containing a mesh, rename `<file>_geo`, drop
+   pivot), `wbSetFolder`, `wbRefresh`.
+5. **UI** — `_wbRow`/`_wbNums`/`_wbLabel`/`_wbFolderRow` (module level, not closures, so
+   `_wbFillModels` can rebuild rows on Refresh), `_wbFillModels`, `wbUI`.
+
+## Adding a section
+
+`WB_SECTIONS = [('grates', 'Grates'), ('copings', 'Copings')]` — one more tuple adds a
+whole section: folder field, browse, Refresh, and one import button per model file
+found. No other code changes.
+
+## Testing (weeBuild)
+
+`python tests/test_build_logic.py` — stubs `maya.cmds`/`maya.mel` with a recorder and
+exec's the *whole* file, so loading the panel and registering the hotkey are covered
+too. The stub answers enough poly queries to trace a real build: faces are `.f[0]`…
+`.f[5]` with "world Y" = the index, so `.f[5]` is always the top. Checks cover name
+sanitising, all 8 presets making legal distinct names, the polyCube dims (long→X,
+short→Z), bevel offset, X spacing, numbering across repeat presses, rejected arguments,
+folder scanning (spaces, case-blind sort, non-model files, subfolders), import
+root-picking and clash-free renaming, and the panel actually building its buttons.
 
 ## Git
 
