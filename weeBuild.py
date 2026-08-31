@@ -506,7 +506,10 @@ def wbCoping(kind='flat', width=None, length=None, count=1, ribs=None,
 	size = spec.get('size') or (WB_COPING_W, WB_COPING_L)
 	width = float(size[0] if width is None else width)
 	length = float(size[1] if length is None else length)
-	ribs = spec['ribs'] if ribs is None else bool(ribs)
+	#ribs belong to the profile, not to the caller: only 'flat' has them on the real
+	#product, so the flag can switch them OFF but never conjure them onto a profile
+	#that has none.  to give another profile ribs, set it in WB_COPING_PROFILES.
+	ribs = spec['ribs'] and (True if ribs is None else bool(ribs))
 	count = int(count)
 	if length <= 0:
 		raise ValueError('coping length must be greater than 0.')
@@ -534,7 +537,7 @@ def _wbCopingBtn(kind, width, length):
 	#a preset button: the panel fields win, the preset supplies the fallback
 	return wbCoping(kind, width=_wbNum('cwidth', width), length=_wbNum('clength', length),
 					count=_wbNum('ccount', 1, integer=True),
-					ribs=_wbFlag('cribs', _wbCopingSpec(kind)['ribs']),
+					ribs=_wbFlag('cribs', True),
 					bevel=_wbNum('cbevel', WB_COPING_BEVEL),
 					relax=_wbNum('crelax', WB_COPING_RELAX))
 def wbCopingCustom():
@@ -728,7 +731,8 @@ def wbUI():
 	f = mc.frameLayout(parent=main, label='  Copings', collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
 	_wbNums(f, [('ccount', 'Count', '1'), ('cwidth', 'Width', '%g' % WB_COPING_W), ('clength', 'Length', '%g' % WB_COPING_L)])
 	_wbNums(f, [('cbevel', 'Bevel', '%g' % WB_COPING_BEVEL), ('crelax', 'Relax', '%g' % WB_COPING_RELAX)])
-	_wbCheck(f, 'cribs', 'underside ribs', True, 'merge the ribbed underside in, the way the source model has it')
+	_wbCheck(f, 'cribs', 'underside ribs', True,
+			 'only the flat profile has ribs; unticking drops them, ticking cannot add them')
 	for i in range(0, len(WB_COPINGS), 2):
 		_wbRow(f, [(lbl.replace(' ', chr(10), 1), (lambda _k=k, _w=w, _l=l: _wbCopingBtn(_k, _w, _l)), 'teal',
 					'build the %s coping profile at %g x %gcm' % (k, w, l))

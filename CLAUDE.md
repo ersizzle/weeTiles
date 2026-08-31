@@ -194,6 +194,15 @@ Regions in file order, marked with banner comments:
      the user confirmed that is correct. Don't level it.
    - Ribs interpenetrate the slab rather than being booleaned — that is what the source
      model does, so it is deliberate.
+   - **Ribs belong to the profile, not the caller.** Only `flat` has them on the real
+     product, so `wbCoping` computes `spec['ribs'] and …`: the panel tick box and the
+     `ribs=` argument can switch them **off**, never conjure them onto a profile that
+     has none. To give another profile ribs, set it in `WB_COPING_PROFILES`.
+     This bit once: `_wbCopingBtn` passed the tick box through `_wbFlag`, and with the
+     panel open the box (created ticked) beat the per-profile default, so every profile
+     got the flat coping's ribs. The tests missed it because they all called `wbCoping`
+     directly, where `ribs=None` reaches the profile flag. **Check `[19]` exercises the
+     button path** — if you touch this, keep that coverage.
    - UVs: `polyProjection` planar from **+Y (top)** — deliberate, and it matches how the
      real tiles are laser-painted from above, so **do not replace it with an unroll**.
      Then `_wbRelaxUV` widens the noses and `_wbFitUV` stretches the shell to fill **0-1

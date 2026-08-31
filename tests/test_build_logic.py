@@ -785,6 +785,38 @@ def main():
 		check('channel relaxes one end',
 			  len([c for c in mc.find('polyEditUV') if c[2].get('scaleU') == 2.0]), 1)
 
+		print('\n[19] ribs belong to the profile, not the tick box')
+		#this is the path a BUTTON takes.  the earlier checks all called wbCoping()
+		#directly, where ribs defaults to None -> the profile's own flag; with the panel
+		#open the tick box answers instead, and it used to win, so every profile got the
+		#flat coping's ribs.  only 'flat' has them on the real product.
+		g['wbUI']()
+		cb = g['_wbFields']['cribs']
+		want = {'flat': 8, 'overflow': 0, 'channel': 0}
+		mc.checks[cb] = True
+		for kind in ('flat', 'overflow', 'channel'):
+			mc.calls = []
+			g['_wbCopingBtn'](kind, 25.0, 50.0)
+			check('button %-8s ticked   -> %d ribs' % (kind, want[kind]),
+				  len(mc.find('polyCube')), want[kind])
+		mc.checks[cb] = False
+		for kind in ('flat', 'overflow', 'channel'):
+			mc.calls = []
+			g['_wbCopingBtn'](kind, 25.0, 50.0)
+			check('button %-8s unticked -> 0 ribs' % kind, len(mc.find('polyCube')), 0)
+		mc.checks[cb] = True
+
+		#the tick box can subtract but never add
+		for kind, forced, want_n in (('flat', True, 8), ('flat', False, 0),
+									 ('channel', True, 0), ('overflow', True, 0)):
+			mc.calls = []
+			g['wbCoping'](kind, ribs=forced)
+			check('wbCoping(%-8s ribs=%-5s) -> %d' % (kind, forced, want_n),
+				  len(mc.find('polyCube')), want_n)
+		check('and the profile flags still say who has them',
+			  {k: v['ribs'] for k, v in sorted(g['WB_COPING_PROFILES'].items())},
+			  {'channel': False, 'flat': True, 'overflow': False})
+
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
 

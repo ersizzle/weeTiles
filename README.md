@@ -238,7 +238,7 @@ are the shapes the product actually has — not an approximation.
 | Length | per profile | Along the coping, in cm |
 | Bevel | 0.03 | Chamfer on both end cap perimeters, as a *fraction* of the shortest adjacent edge. `0` turns it off |
 | Relax | 2 | Gives the squashed nose(s) a bigger share of the UV square, in U only. `1` turns it off |
-| underside ribs | per profile | On for `flat`, off for the others |
+| underside ribs | on | Only `flat` has ribs. Unticking drops them; ticking cannot add them to a profile that has none |
 
 Changing **Width** stretches only the flat back run. Every nose, lip, channel and
 undercut keeps its measured shape — which is the point of rebuilding these rather than
