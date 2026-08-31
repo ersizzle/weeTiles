@@ -38,6 +38,9 @@ class StubMC(object):
 		self.uvCount = 20
 		self.uvFlip = False
 		self.uvBB = ((0.0, 1.0), (0.0, 1.0))   #what polyEvaluate(bb2) reports
+		self.hotkeySets = set()
+		self.hotkeySetCur = 'Maya_Default'     #the read only one Maya starts on
+		self.hotkeyTaken = ''                  #what hotkey(q=True, name=True) answers
 		self.assemblies = []      #what ls(assemblies=True) returns
 		self.meshRoots = set()    #which of those carry a mesh
 		self.newOnImport = []     #what the next file(i=True) creates
@@ -228,7 +231,19 @@ class StubMC(object):
 		self._rec('nameCommand', *a, **kw)
 		return a[0] if a else 'nc'
 	def hotkey(self, *a, **kw):
+		if kw.get('q'):
+			return self.hotkeyTaken
 		self._rec('hotkey', *a, **kw)
+	def hotkeySet(self, *a, **kw):
+		self._rec('hotkeySet', *a, **kw)
+		if kw.get('q'):
+			return self.hotkeySetCur if kw.get('current') else False
+		if kw.get('exists'):
+			return (a[0] if a else '') in self.hotkeySets
+		nm = a[0] if a else 'hotkeySet1'
+		self.hotkeySets.add(nm)
+		self.hotkeySetCur = nm
+		return nm
 
 
 class StubMel(object):
@@ -302,8 +317,19 @@ def main():
 		print('\n[1] the file loads and opens the panel')
 		check('version', g['WB_VERSION'], '1.0')
 		check('workspaceControl created', bool(mc.find('workspaceControl')), True)
-		check('no hotkey registered', mc.find('hotkey'), [])
-		check('no nameCommand either', mc.find('nameCommand'), [])
+		hk = mc.find('hotkey')[0]
+		check('Shift+Alt+1 bound', hk[1][0], '1')
+		check('   alt', hk[2].get('altModifier'), True)
+		check('   shift', hk[2].get('shiftModifier'), True)
+		check('   not ctrl', hk[2].get('ctrlModifier'), False)
+		check('bound to our nameCommand', hk[2].get('name'), 'weeBuildOpen')
+		nm = mc.find('nameCommand')[0][2]
+		check('the command is python, not MEL', nm.get('sourceType'), 'python')
+		check('reopens when already loaded', '__main__.weeBuild()' in nm['command'], True)
+		check('bootstraps from the URL when not', g['WB_SELF_URL'] in nm['command'], True)
+		check('left the read only default set', mc.hotkeySetCur, 'weeTools')
+		check('copied it rather than starting blank',
+			  mc.find('hotkeySet')[-1][2].get('source'), 'Maya_Default')
 		check('no warnings on load', mc.warnings, [])
 
 		print('\n[2] node names - Maya takes no dots')
@@ -635,6 +661,44 @@ def main():
 				check('relax %g rejected' % bad, False, True)
 			except ValueError:
 				check('relax %g rejected' % bad, True, True)
+
+		print('\n[17] the hotkey binding')
+		check('label reads the way the user says it',
+			  g['_wbKeyLabel']('1', True, False, True), 'Shift+Alt+1')
+		check('all three modifiers', g['_wbKeyLabel']('a', True, True, True), 'Shift+Ctrl+Alt+A')
+		check('no modifiers', g['_wbKeyLabel']('5', False, False, False), '5')
+
+		#a different key, and shift off - the label and the flags must follow
+		mc.calls = []
+		check('returns what it bound', g['wbHotkey'](key='7', sht=False), 'Alt+7')
+		hk = mc.find('hotkey')[0]
+		check('bound key 7', hk[1][0], '7')
+		check('shift off', hk[2].get('shiftModifier'), False)
+
+		#binding over something else should say so rather than silently stealing it
+		mc.calls = []
+		mc.warnings = []
+		mc.hotkeyTaken = 'SomeOtherThing'
+		g['wbHotkey']()
+		check('warns when replacing another binding', len(mc.warnings), 1)
+		check('names what it replaced', 'SomeOtherThing' in mc.warnings[0], True)
+		check('still binds it', len(mc.find('hotkey')), 1)
+
+		mc.calls = []
+		mc.warnings = []
+		mc.hotkeyTaken = 'weeBuildOpen'
+		g['wbHotkey']()
+		check('rebinding our own is not a clash', mc.warnings, [])
+		mc.hotkeyTaken = ''
+
+		#already on an editable set: leave it alone, do not force weeTools on the user
+		mc.calls = []
+		mc.hotkeySetCur = 'ErbaysOwnSet'
+		g['wbHotkey']()
+		check('keeps a set the user already chose', mc.hotkeySetCur, 'ErbaysOwnSet')
+		check('and creates nothing',
+			  [c for c in mc.find('hotkeySet') if c[2].get('source')], [])
+		mc.hotkeySetCur = 'Maya_Default'
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)

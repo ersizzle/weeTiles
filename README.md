@@ -188,8 +188,13 @@ import urllib.request, __main__
 exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeBuild.py').read().decode('utf-8'), __main__.__dict__)
 ```
 
-Opens the panel. It registers **no hotkey** either — to reopen it without
-re-downloading, run `weeBuild()`.
+Opens the panel and binds **Shift+Alt+1** to reopen it. Maya remembers hotkeys, so it
+survives a restart — after one, the key pulls the file down again before opening.
+
+Because Maya's own `Maya_Default` hotkey set is read-only, the binding goes into a set
+called `weeTools`, copied from whatever you were on. If you already use your own custom
+set, it is used as-is and nothing is switched. `wbHotkey('7', sht=False)` rebinds to
+something else; it warns rather than silently stealing a key that was already in use.
 
 ## Tiles
 

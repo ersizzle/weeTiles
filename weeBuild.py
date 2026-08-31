@@ -9,8 +9,8 @@
 #	import urllib.request, __main__
 #	exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeBuild.py').read().decode('utf-8'), __main__.__dict__)
 #
-#It deliberately registers no hotkey - Alt+2 / Alt+3 are already taken in the
-#user's Maya, so the panel is opened by running weeBuild().
+#Shift+Alt+1 opens the panel.  Alt+1/2/3 are already taken in the user's Maya, so
+#those are deliberately left alone.
 
 import os
 import re
@@ -22,6 +22,8 @@ WB_VERSION = '1.0'
 WB_UI = 'weeBuild'
 WB_SELF_URL = 'https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeBuild.py'
 WB_OPT_SET = 'weeBuildSettings'
+WB_HOTKEY_SET = 'weeTools'    #Maya_Default is read only, so hotkeys go in here
+WB_NAME_CMD = 'weeBuildOpen'
 WB_WIDTH = 230
 
 #tile presets in panel order: (label, short cm, long cm).  the long edge goes
@@ -642,6 +644,45 @@ def wbUI():
 #  entry point
 ##############################################################################
 
+def _wbKeyLabel(key, alt, ctl, sht):
+	mods = [m for m, on in (('Shift', sht), ('Ctrl', ctl), ('Alt', alt)) if on]
+	return '+'.join(mods + [str(key).upper()])
+def _wbEditableHotkeySet():
+	#Maya_Default is read only, so a hotkey written into it is silently useless.
+	#switch to our own set, copied from whatever is current, the first time.
+	cur = mc.hotkeySet(q=True, current=True)
+	if cur != 'Maya_Default':
+		return cur
+	if mc.hotkeySet(WB_HOTKEY_SET, exists=True):
+		mc.hotkeySet(WB_HOTKEY_SET, e=True, current=True)
+	else:
+		mc.hotkeySet(WB_HOTKEY_SET, source=cur, current=True)
+	return WB_HOTKEY_SET
+def wbHotkey(key='1', alt=True, sht=True, ctl=False):
+	#bind a key to open the panel.  Maya remembers hotkeys, so this survives a
+	#restart - which is why the command bootstraps itself from WB_SELF_URL when
+	#weeBuild is not loaded yet, and simply reopens the panel when it is.  it does
+	#NOT re-download on every press: nothing is pushed, so that would serve a stale
+	#file over the copy the user is actually working on.
+	label = _wbKeyLabel(key, alt, ctl, sht)
+	cmd = ("import __main__, urllib.request; "
+		   "__main__.weeBuild() if hasattr(__main__, 'weeBuild') else "
+		   "exec(urllib.request.urlopen('%s').read().decode('utf-8'), __main__.__dict__)" % WB_SELF_URL)
+	_wbEditableHotkeySet()
+	try:
+		taken = mc.hotkey(key, q=True, name=True, altModifier=alt, ctrlModifier=ctl, shiftModifier=sht)
+	except Exception:
+		taken = ''
+	nc = mc.nameCommand(WB_NAME_CMD, annotation='weeBuild: open the panel',
+						command=cmd, sourceType='python')
+	if taken and taken not in (nc, WB_NAME_CMD):
+		mc.warning('weeBuild: %s was bound to "%s" - replacing it.' % (label, taken))
+	#no fallback to a modifier we were not asked for: quietly landing on Alt+1 would
+	#clobber weeScript
+	mc.hotkey(key, altModifier=alt, ctrlModifier=ctl, shiftModifier=sht, name=nc)
+	print('weeBuild: %s opens the panel.' % label)
+	return label
+
 def weeBuild():
 	#open (or re-open) the panel
 	if mc.workspaceControl(WB_UI, q=True, exists=True):
@@ -655,3 +696,8 @@ def weeBuild():
 
 
 weeBuild()
+try:
+	wbHotkey()
+except Exception as _wbE:
+	mc.warning('weeBuild: could not bind Shift+Alt+1 - %s.  '
+			   'Set it by hand in the Hotkey Editor, or call wbHotkey().' % _wbE)

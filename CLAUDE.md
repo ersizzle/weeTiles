@@ -22,8 +22,9 @@ code to weeScript or make either import the other.
   import urllib.request, __main__
   exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeTiles.py').read().decode('utf-8'), __main__.__dict__)
   ```
-- Bottom of the file calls `weeTiles()` (opens the browser). **No hotkey is registered**
-  — Alt+2 and Alt+3 are already taken in the user's Maya. Do not add one back.
+- Bottom of the file calls `weeTiles()` (opens the browser). **No hotkey** — Alt+2 and
+  Alt+3 are taken in the user's Maya. weeBuild owns Shift+Alt+1; if weeTiles ever wants
+  one, pick a different free combo and copy `wbHotkey`'s hotkey-set handling.
 - Entry point `weeTiles()`; `WtBrowser` is the window; the open window is kept in `_wtWin`.
 
 ## Conventions (IMPORTANT — keep these)
@@ -115,7 +116,21 @@ only, not loaded by anything.
 
 - Same exec-the-raw-file pattern as the others; `WB_SELF_URL` points at
   `.../weeTiles/master/weeBuild.py`.
-- Bottom of the file calls `weeBuild()`. **No hotkey** — see the weeTiles note above.
+- Bottom of the file calls `weeBuild()` then `wbHotkey()`, which binds **Shift+Alt+1** to
+  open the panel. Alt+1 (weeScript), Alt+2 and Alt+3 are taken in the user's Maya —
+  don't bind those. `wbHotkey(key=, alt=, sht=, ctl=)` rebinds it.
+- Two things that make hotkey code here non-obvious, both covered by tests:
+  - **`Maya_Default` is read-only**, so a hotkey written into it silently does nothing.
+    `_wbEditableHotkeySet` copies it to `WB_HOTKEY_SET` (`weeTools`) and switches, but
+    only when the current set *is* `Maya_Default` — a set the user already picked is left
+    alone.
+  - `nameCommand` needs `sourceType='python'` **with raw Python**, or `'mel'` with a
+    `python("…")` wrapper. The old removed code mixed the two, which could never have
+    fired. Don't reintroduce that.
+- The bound command **reopens the panel** when `weeBuild` is already in `__main__`, and
+  only fetches `WB_SELF_URL` when it isn't (so it still works after a Maya restart). It
+  deliberately does *not* re-download on every press: nothing is pushed to that URL, so
+  that would serve a stale file over the copy being worked on.
 - `weeBuild()` makes the `workspaceControl` whose `uiScript` is `'wbUI()'`, so **`wbUI`
   must stay a module-level name in `__main__`** and must be re-runnable — Maya calls it
   again whenever it restores the panel. It rebuilds `_wbFields` / `_wbCols` each time.
