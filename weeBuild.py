@@ -9,8 +9,8 @@
 #	import urllib.request, __main__
 #	exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeBuild.py').read().decode('utf-8'), __main__.__dict__)
 #
-#Alt+3 re-pulls this file from that address and reopens the panel.
-#(weeTiles takes Alt+2, so weeBuild takes Alt+3.)
+#It deliberately registers no hotkey - Alt+2 / Alt+3 are already taken in the
+#user's Maya, so the panel is opened by running weeBuild().
 
 import os
 import re
@@ -40,9 +40,51 @@ WB_THICK = 0.76      #tile thickness (Y) in cm
 WB_GROUT = 0.15      #chamfer per top edge -> a 0.3cm grout valley between two tiles
 WB_SPACE = 5.0       #gap between tiles when several are built at once
 
+#coping presets in panel order: (label, profile key, width cm, length cm).
+WB_COPINGS = [
+	('Flat 25 x 50', 'flat', 25.0, 50.0),
+]
+#the 'flat' profile is measured straight off tile_models/copings/
+#flat_coping_natural.gltf - 27 (X, Y) points of the swept cross-section, in cm,
+#in the file's own order (clockwise, so _wbBuildCoping reverses it).  X runs
+#from the back edge at -18.86 to the nose at +6.14, Y sits on the floor at
+#-0.04.  the bullnose is an exact R0.9651 arc and the grip undercut R~1.035;
+#do not round these off, the arcs stop being circular.
+WB_COPING_PROFILES = {
+	'flat': [
+		(5.1198, 0.0122), (5.0684, 0.263), (5.0147, 0.4942),
+		(4.8965, 0.7195), (4.716, 0.9121), (4.49, 1.0486),
+		(4.2451, 1.1175), (4.0078, 1.1219), (-0.4046, 0.8465),
+		(-1.2334, 0.7948), (-6.3987, 0.5783), (-7.2281, 0.5435),
+		(-12.36, 0.4735), (-13.1449, 0.4628), (-18.86, 0.4628),
+		(-18.86, 1.56), (-12.36, 1.56), (-6.4432, 1.6408),
+		(-0.4485, 1.892), (4.7927, 2.2191), (5.03, 2.2147),
+		(5.2749, 2.1458), (5.5009, 2.0093), (5.6814, 1.8167),
+		(5.7997, 1.5914), (5.8533, 1.3603), (6.14, -0.04),
+	],
+}
+WB_COPING_W = 25.0     #width the profile above was measured at
+WB_COPING_L = 50.0     #sweep length of the source model
+WB_COPING_MINW = 20.0  #below this the flat back run would be stretched away
+WB_COPING_BACK = -13.0 #points at or behind this X move when the width changes
+WB_RIB_W = 1.0         #underside rib: 1.0 wide, 1.3 tall, 3.0 pitch, full length
+WB_RIB_H = 1.3
+WB_RIB_Y0 = -0.036     #rib underside, level with the nose at -0.04
+WB_RIB_PITCH = 3.0
+WB_RIB_INSET = 0.04    #first rib sits this far in from the back edge
+WB_RIB_LIMIT = 3.18    #ribs stop here, short of the nose
+#chamfer on the two end cap perimeters, as a FRACTION of the shortest adjacent edge -
+#matches the polyBevel3 the user dialled in by hand: Fraction 0.03, 1 segment, chamfer on
+WB_COPING_BEVEL = 0.03
+#a top projection squashes the bullnose (2.18x) and the front face (4.99x), because
+#from above they are nearly edge on.  this widens just those UVs in U, never in V, so
+#the nose reads closer to its real size.  1.0 = leave it alone (a true top projection),
+#2.18 makes the bullnose exactly 1:1, 3.24 fully unrolls the nose.
+WB_COPING_RELAX = 2.0
+
 #model sections: (settings key, panel label).  drop model files into a section's
 #folder and hit Refresh - one button appears per file, no code change needed.
-WB_SECTIONS = [('grates', 'Grates'), ('copings', 'Copings')]
+WB_SECTIONS = [('grates', 'Grates'), ('copings', 'Coping models')]
 WB_EXT = ('.ma', '.mb', '.fbx', '.obj')
 WB_FTYPE = {'.ma': 'mayaAscii', '.mb': 'mayaBinary', '.fbx': 'FBX', '.obj': 'OBJ'}
 
@@ -147,6 +189,13 @@ def _wbNum(key, default, integer=False):
 	except ValueError:
 		raise ValueError('"%s" is not a number (%s field).' % (txt, key))
 	return int(round(v)) if integer else v
+def _wbFlag(key, default):
+	#read one of the panel's checkboxes, falling back to the default when the
+	#panel is closed
+	c = _wbFields.get(key)
+	if c and mc.checkBox(c, q=True, exists=True):
+		return bool(mc.checkBox(c, q=True, value=True))
+	return default
 
 
 ##############################################################################
@@ -217,6 +266,185 @@ def wbTileCustom():
 		raise ValueError('enter two numbers, e.g. 20x40.')
 	return _wbTileBtn(float(nums[0]), float(nums[1]))
 
+
+##############################################################################
+#  copings - a measured profile swept along Z, with the underside ribs merged in
+##############################################################################
+
+def _wbCopingProfile(kind, width):
+	#the stored profile stretched to 'width'.  only the flat back run stretches:
+	#the bullnose arc, the front lip and the grip undercut keep the shape they
+	#were measured at, which is the whole point of rebuilding this procedurally.
+	prof = WB_COPING_PROFILES.get(kind)
+	if not prof:
+		raise ValueError('unknown coping profile "%s".' % kind)
+	width = float(width)
+	if width < WB_COPING_MINW:
+		raise ValueError('coping width must be at least %gcm.' % WB_COPING_MINW)
+	dx = width - WB_COPING_W
+	return [((x - dx) if x <= WB_COPING_BACK else x, y) for x, y in prof]
+def _wbCopingRibs(profile):
+	#rib centres in X.  they start just inside the back edge and march forward on
+	#a fixed pitch, stopping short of the nose - the source model has 8 of them
+	#across 25cm and a wider coping simply gets more.
+	start = min(x for x, _ in profile) + WB_RIB_INSET
+	n = int((WB_RIB_LIMIT - WB_RIB_W - start) / WB_RIB_PITCH) + 1
+	return [start + WB_RIB_W / 2.0 + i * WB_RIB_PITCH for i in range(max(n, 0))]
+def _wbCapEdges(node, length, tol=1e-4):
+	#the edges bounding the two end caps: both of an edge's verts sit at the same
+	#end of the sweep, while every wall edge runs along Z from one end to the other
+	out = []
+	for e in mc.ls(node + '.e[*]', flatten=True):
+		zs = [mc.pointPosition(v, world=True)[2]
+			  for v in mc.ls(mc.polyListComponentConversion(e, fe=True, tv=True), flatten=True)]
+		if not zs or max(zs) - min(zs) >= tol:
+			continue
+		if abs(min(zs)) < tol or abs(min(zs) - length) < tol:
+			out.append(e)
+	return out
+def _wbNoseX(profile):
+	#the bullnose starts at the profile's high point; everything at or beyond that X
+	#is nose and front face, which is exactly what a top projection compresses
+	return max(profile, key=lambda p: p[1])[0]
+def _wbRelaxUV(node, nose_x, factor):
+	#widen the nose UVs in U only.  the pivot is whichever end of the nose block
+	#faces the rest of the shell, so the top surface never moves - the shell only
+	#ever grows outward.  works whichever way round Maya laid U out.
+	if factor == 1.0:
+		return []
+	uvs = mc.ls(node + '.map[*]', flatten=True)
+	if not uvs:
+		return []
+	sel, selu, allu = [], [], []
+	for uv in uvs:
+		u = mc.polyEditUV(uv, q=True)[0]
+		allu.append(u)
+		vtx = mc.ls(mc.polyListComponentConversion(uv, fuv=True, tv=True), flatten=True)
+		if vtx and mc.pointPosition(vtx[0], world=True)[0] >= nose_x - 1e-4:
+			sel.append(uv)
+			selu.append(u)
+	if not sel:
+		return []
+	centre = (min(allu) + max(allu)) / 2.0
+	lo, hi = min(selu), max(selu)
+	pivot = lo if abs(lo - centre) < abs(hi - centre) else hi
+	mc.polyEditUV(sel, pivotU=pivot, pivotV=0.0, scaleU=factor, scaleV=1.0)
+	return sel
+def _wbFitUV(node, du, dv):
+	#a planar projection fits the shell to a unit square, so anything that is not
+	#square comes out stretched - a 25 x 50 coping gets squashed 2:1.  rescale the
+	#shell to real du : dv proportions and drop it at the origin of 0-1 space.
+	if du <= 0 or dv <= 0:
+		return
+	uvs = mc.polyListComponentConversion(node, tuv=True)
+	bb = mc.polyEvaluate(node, boundingBox2d=True)
+	u0, u1 = bb[0][0], bb[0][1]
+	v0, v1 = bb[1][0], bb[1][1]
+	if u1 - u0 <= 0 or v1 - v0 <= 0:
+		mc.warning('weeBuild: %s has no UV area to fit.' % node)
+		return
+	m = float(max(du, dv))
+	mc.polyEditUV(uvs, pivotU=u0, pivotV=v0,
+				  scaleU=(du / m) / (u1 - u0), scaleV=(dv / m) / (v1 - v0))
+	mc.polyEditUV(uvs, relative=True, uValue=-u0, vValue=-v0)
+def _wbBuildCoping(profile, length, name, offset_x, ribs=True, bevel=WB_COPING_BEVEL,
+				   relax=WB_COPING_RELAX):
+	#one coping: profile facet -> sweep along +Z -> cap the back -> merge the
+	#ribs in -> planar-Y UVs -> centre it and drop the pivot to bottom centre.
+	#the measured loop runs clockwise in XY so its facet normal would point -Z;
+	#reversing it makes the sweep come out with the walls facing outward.
+	length = float(length)
+	pts = [(x, y, 0.0) for x, y in reversed(profile)]
+	body = mc.polyCreateFacet(p=pts, name=name)[0]
+	mc.polyExtrudeFacet(body + '.f[0]', constructionHistory=True, keepFacesTogether=True, localTranslateZ=length)
+	mc.delete(body, constructionHistory=True)
+	#the facet the sweep started from leaves an open border behind at Z=0
+	try:
+		mc.polyCloseBorder(body, constructionHistory=False)
+	except Exception:
+		pass
+	if bevel > 0:
+		#chamfer both end cap perimeters.  done before the ribs go in, so only the
+		#swept body is bevelled - the ribs keep their square ends
+		edges = _wbCapEdges(body, length)
+		if edges:
+			bev = mc.polyBevel3(edges, offset=bevel, offsetAsFraction=True, segments=1, depth=1,
+								worldSpace=True, autoFit=True, mergeVertices=True, smoothingAngle=30)
+			#the channel box labels this "Fraction" and on some Maya versions that is a
+			#separate attribute from offset, so set it directly rather than trust the flag
+			if bev:
+				try:
+					mc.setAttr(bev[0] + '.fraction', bevel)
+				except Exception:
+					pass
+			mc.delete(body, constructionHistory=True)
+		else:
+			mc.warning('weeBuild: found no end cap edges to bevel on %s.' % name)
+	parts = [body]
+	if ribs:
+		for i, cx in enumerate(_wbCopingRibs(profile)):
+			r = mc.polyCube(w=WB_RIB_W, h=WB_RIB_H, d=length, name='%s_rib%02d' % (name, i + 1))[0]
+			mc.move(cx, WB_RIB_Y0 + WB_RIB_H / 2.0, length / 2.0, r)
+			parts.append(r)
+		if len(parts) > 1:
+			#the source model merges the ribs without booleaning them, so they
+			#interpenetrate the slab exactly as they do in the original
+			body = mc.polyUnite(parts, constructionHistory=False, name=name)[0]
+	tf = mc.polyListComponentConversion(body, tf=True)
+	#no 90 rotation here (unlike the tiles) - the length already runs along Z,
+	#so a straight planar-Y projection sends the texture down the coping
+	mc.polyProjection(tf, type='Planar', md='y')
+	mc.delete(body, constructionHistory=True)
+	#projected from the top, so the shell spans the width in U and the length in V
+	_wbFitUV(body, max(x for x, _y in profile) - min(x for x, _y in profile), length)
+	try:
+		_wbRelaxUV(body, _wbNoseX(profile), relax)
+	except Exception as e:
+		#never lose finished geometry over a UV tweak
+		mc.warning('weeBuild: could not relax the nose UVs on %s - %s' % (name, e))
+	bb = mc.xform(body, q=True, ws=True, bb=True)
+	mc.move(offset_x - (bb[0] + bb[3]) / 2.0, 0, -(bb[2] + bb[5]) / 2.0, body, relative=True)
+	_wbBottomPivot(body)
+	return body
+def wbCoping(kind='flat', width=WB_COPING_W, length=WB_COPING_L, count=1, ribs=True,
+			 bevel=WB_COPING_BEVEL, relax=WB_COPING_RELAX, spacing=WB_SPACE):
+	#build 'count' copings of the given profile in a row along X
+	width, length = float(width), float(length)
+	count = int(count)
+	if length <= 0:
+		raise ValueError('coping length must be greater than 0.')
+	if count < 1:
+		raise ValueError('need at least 1 coping.')
+	bevel = float(bevel)
+	if bevel < 0 or bevel >= 0.5:
+		raise ValueError('coping bevel is a fraction - it must be 0 or more and under 0.5.')
+	relax = float(relax)
+	if relax < 1.0 or relax > 5.0:
+		raise ValueError('coping UV relax must be between 1 (a plain top projection) and 5.')
+	token = _wbSafe('%gx%g' % (width, length), fragment=True) or 'coping'
+	prof = _wbCopingProfile(kind, width)
+	made = []
+	for i in range(count):
+		nm = _wbUnique('coping_' + _wbSafe(kind, fragment=True) + '_' + token + '_%02d_geo')
+		made.append(_wbBuildCoping(prof, length, nm, i * (width + spacing), ribs, bevel, relax))
+	mc.select(made)
+	print('weeBuild: built %d coping(s) at %g x %gcm: %s' % (count, width, length, ', '.join(made)))
+	return made
+def _wbCopingBtn(kind, width, length):
+	#a preset button: the panel fields win, the preset supplies the fallback
+	return wbCoping(kind, width=_wbNum('cwidth', width), length=_wbNum('clength', length),
+					count=_wbNum('ccount', 1, integer=True), ribs=_wbFlag('cribs', True),
+					bevel=_wbNum('cbevel', WB_COPING_BEVEL),
+					relax=_wbNum('crelax', WB_COPING_RELAX))
+def wbCopingCustom():
+	#any other width x length, typed in
+	r = mc.promptDialog(title='Custom coping', message='Width x Length in cm (e.g. 25x50):', text='25x50', button=['OK', 'Cancel'], defaultButton='OK', cancelButton='Cancel', dismissString='Cancel')
+	if r != 'OK':
+		return []
+	nums = re.findall(r'[\d.]+', mc.promptDialog(q=True, text=True) or '')
+	if len(nums) < 2:
+		raise ValueError('enter two numbers, e.g. 25x50.')
+	return _wbCopingBtn(WB_COPINGS[0][1], float(nums[0]), float(nums[1]))
 
 ##############################################################################
 #  models - grates, copings, and whatever gets added to WB_SECTIONS later
@@ -334,6 +562,14 @@ def _wbNums(parent, specs):
 		form += [(t, 'top', 4), (t, 'bottom', 2), (f, 'top', 1), (f, 'bottom', 1)]
 	mc.formLayout(fl, e=True, attachPosition=att, attachForm=form)
 	return fl
+def _wbCheck(parent, key, label, value=True, ann=''):
+	#one full width checkbox, remembered in _wbFields like the number fields
+	fl = mc.formLayout(parent=parent, numberOfDivisions=100, height=22)
+	c = mc.checkBox(parent=fl, label=label, value=value, annotation=ann)
+	_wbFields[key] = c
+	mc.formLayout(fl, e=True, attachPosition=[(c, 'left', 4, 0), (c, 'right', 2, 100)],
+				  attachForm=[(c, 'top', 2), (c, 'bottom', 2)])
+	return fl
 def _wbLabel(parent, text):
 	return mc.text(parent=parent, label=text, height=16, align='left', font='smallObliqueLabelFont')
 def _wbFolderRow(parent, kind):
@@ -388,6 +624,14 @@ def wbUI():
 					'build a %g x %gcm tile' % (s, l)) for lbl, s, l in WB_TILES[i:i + 4]])
 	_wbRow(f, [('Custom size...', wbTileCustom, 'amber', 'build any other short x long size')])
 
+	f = mc.frameLayout(parent=main, label='  Copings', collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
+	_wbNums(f, [('ccount', 'Count', '1'), ('cwidth', 'Width', '%g' % WB_COPING_W), ('clength', 'Length', '%g' % WB_COPING_L)])
+	_wbNums(f, [('cbevel', 'Bevel', '%g' % WB_COPING_BEVEL), ('crelax', 'Relax', '%g' % WB_COPING_RELAX)])
+	_wbCheck(f, 'cribs', 'underside ribs', True, 'merge the ribbed underside in, the way the source model has it')
+	_wbRow(f, [(_wbWrap(lbl), (lambda _k=k, _w=w, _l=l: _wbCopingBtn(_k, _w, _l)), 'teal',
+				'build the %s coping profile at %g x %gcm' % (k, w, l)) for lbl, k, w, l in WB_COPINGS])
+	_wbRow(f, [('Custom size...', wbCopingCustom, 'amber', 'build a coping at any width x length')])
+
 	for key, label in WB_SECTIONS:
 		f = mc.frameLayout(parent=main, label='  ' + label, collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
 		_wbFolderRow(f, key)
@@ -410,17 +654,6 @@ def weeBuild():
 						initialWidth=WB_WIDTH, initialHeight=560)
 	mc.workspaceControl(WB_UI, e=True, resizeWidth=WB_WIDTH)
 	return WB_UI
-def _wbRegisterHotkey(key='3', alt=True, ctl=False):
-	#Alt+3 re-pulls this file from GitHub and reopens the panel
-	cmd = ("import urllib.request, __main__\n"
-		   "exec(urllib.request.urlopen('%s?t='+str(__import__('time').time())).read().decode('utf-8'), __main__.__dict__)" % WB_SELF_URL)
-	nc = mc.nameCommand('weeBuildReload', annotation='weeBuild: reload from GitHub',
-						command='python("%s")' % cmd.replace('\n', r'\n').replace('"', r'\"'), sourceType='python')
-	mc.hotkey(k=key, alt=alt, ctl=ctl, name=nc)
 
 
 weeBuild()
-try:
-	_wbRegisterHotkey()
-except Exception as _wbE:
-	mc.warning('weeBuild: could not register the Alt+3 hotkey - %s' % _wbE)

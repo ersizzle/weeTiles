@@ -7,6 +7,7 @@
 #answers just enough poly queries that a real tile build can be traced: what
 #polyCube was asked for, what the bevel offset was, and where each tile landed.
 
+import math
 import os
 import re
 import shutil
@@ -25,6 +26,17 @@ class StubMC(object):
 		self.opt = {}
 		self.objects = set()      #objExists answers from here
 		self.fields = {}          #textField name -> text
+		self.checks = {}          #checkBox name -> value
+		self.attrs = {}           #setAttr'd plug -> value
+		#stub sweep topology for the coping: e[0..26] is the cap loop at Z=0,
+		#e[27..53] the cap loop at Z=sweepLen, e[54..80] the walls between them
+		self.profileEdges = 27
+		self.sweepLen = 50.0
+		#stub UV layout: map[i] sits at u = i/(n-1) * 0.5 and belongs to a vertex at
+		#X = -18.86 + i/(n-1) * 25.  uvFlip reverses U so the nose lands at low u,
+		#which is how we check the relax pivot does not depend on Maya's U direction.
+		self.uvCount = 20
+		self.uvFlip = False
 		self.assemblies = []      #what ls(assemblies=True) returns
 		self.meshRoots = set()    #which of those carry a mesh
 		self.newOnImport = []     #what the next file(i=True) creates
@@ -57,6 +69,10 @@ class StubMC(object):
 		pat = a[0] if a else ''
 		if isinstance(pat, str) and pat.endswith('.f[*]'):
 			return ['%s.f[%d]' % (pat[:-5], i) for i in range(6)]
+		if isinstance(pat, str) and pat.endswith('.e[*]'):
+			return ['%s.e[%d]' % (pat[:-5], i) for i in range(3 * self.profileEdges)]
+		if isinstance(pat, str) and pat.endswith('.map[*]'):
+			return ['%s.map[%d]' % (pat[:-7], i) for i in range(self.uvCount)]
 		if isinstance(pat, (list, tuple)):
 			return list(pat)
 		return [pat] if pat else []
@@ -65,16 +81,53 @@ class StubMC(object):
 		self._rec('polyCube', **kw)
 		self.objects.add(nm)
 		return [nm, 'polyCube1']
+	def _uvFrac(self, c):
+		m = re.search(r'\.map\[(\d+)\]', c)
+		return (int(m.group(1)) if m else 0) / float(max(self.uvCount - 1, 1))
 	def polyListComponentConversion(self, comp, **kw):
 		c = comp if isinstance(comp, str) else comp[0]
+		if kw.get('fuv') and kw.get('tv'):
+			#the vert this UV belongs to, with its X baked into the name
+			return ['%s|x%g' % (c, -18.86 + self._uvFrac(c) * 25.0)]
+		if kw.get('fe') and kw.get('tv'):
+			#an edge's two verts, with their Z baked into the name for pointPosition
+			m = re.search(r'\.e\[(\d+)\]', c)
+			i = int(m.group(1)) if m else 0
+			n = self.profileEdges
+			if i < n:
+				z0 = z1 = 0.0
+			elif i < 2 * n:
+				z0 = z1 = self.sweepLen
+			else:
+				z0, z1 = 0.0, self.sweepLen
+			return ['%s|z%g' % (c, z0), '%s|z%g' % (c, z1)]
 		if kw.get('tv'):
 			return ['%s.vtx' % c]
 		if kw.get('te'):
 			return ['%s.e' % c]
 		return ['%s.map' % c]
 	def pointPosition(self, v, **kw):
+		if '|z' in v:
+			return [0.0, 0.0, float(v.split('|z')[1])]
+		if '|x' in v:
+			return [float(v.split('|x')[1]), 0.0, 0.0]
 		m = re.search(r'\.f\[(\d+)\]', v)
 		return [0.0, float(m.group(1)) if m else 0.0, 0.0]
+	def polyCreateFacet(self, **kw):
+		nm = kw.get('name') or kw.get('n') or 'pFacet'
+		self._rec('polyCreateFacet', **kw)
+		self.objects.add(nm)
+		return [nm, 'polyCreateFacet1']
+	def polyExtrudeFacet(self, *a, **kw):
+		self._rec('polyExtrudeFacet', *a, **kw)
+		return ['polyExtrudeFace1']
+	def polyCloseBorder(self, *a, **kw):
+		self._rec('polyCloseBorder', *a, **kw)
+	def polyUnite(self, parts, **kw):
+		nm = kw.get('name') or kw.get('n') or 'polySurface1'
+		self._rec('polyUnite', parts, **kw)
+		self.objects.add(nm)
+		return [nm, 'polyUnite1']
 	def polyBevel3(self, edges, **kw):
 		self._rec('polyBevel3', edges, **kw)
 		return ['polyBevel1']
@@ -83,6 +136,10 @@ class StubMC(object):
 	def polyEvaluate(self, *a, **kw):
 		return ((0.0, 1.0), (0.0, 1.0))
 	def polyEditUV(self, *a, **kw):
+		if kw.get('q'):
+			c = a[0] if isinstance(a[0], str) else a[0][0]
+			f = self._uvFrac(c)
+			return [(1.0 - f) * 0.5 if self.uvFlip else f * 0.5, 0.0]
 		self._rec('polyEditUV', *a, **kw)
 	def delete(self, *a, **kw):
 		self._rec('delete', *a, **kw)
@@ -109,6 +166,9 @@ class StubMC(object):
 		for n in self.newOnImport:
 			self.assemblies.append(n)
 			self.objects.add(n)
+	def setAttr(self, plug, *a, **kw):
+		self._rec('setAttr', plug, *a, **kw)
+		self.attrs[plug] = a[0] if a else None
 	def loadPlugin(self, *a, **kw):
 		self._rec('loadPlugin', *a, **kw)
 
@@ -127,6 +187,18 @@ class StubMC(object):
 			self.fields[nm] = kw['text']
 		elif not kw.get('e'):
 			self.fields.setdefault(nm, kw.get('text', ''))
+		return nm
+	def checkBox(self, *a, **kw):
+		nm = a[0] if a else 'chk%d' % len(self.checks)
+		if kw.get('q'):
+			if kw.get('exists'):
+				return nm in self.checks
+			return self.checks.get(nm, False)
+		if kw.get('e') and 'value' in kw:
+			self.checks[nm] = kw['value']
+		elif not kw.get('e'):
+			self._rec('checkBox', *a, **kw)
+			self.checks.setdefault(nm, kw.get('value', False))
 		return nm
 	def columnLayout(self, *a, **kw):
 		if kw.get('q'):
@@ -152,6 +224,7 @@ class StubMC(object):
 	def deleteUI(self, *a, **kw):
 		self._rec('deleteUI', *a, **kw)
 	def nameCommand(self, *a, **kw):
+		self._rec('nameCommand', *a, **kw)
 		return a[0] if a else 'nc'
 	def hotkey(self, *a, **kw):
 		self._rec('hotkey', *a, **kw)
@@ -176,6 +249,39 @@ def load(mc):
 	return g
 
 
+def area(pts):
+	#signed area of the closed profile - sign tells us the winding
+	n = len(pts)
+	return sum(pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1]
+			   for i in range(n)) / 2.0
+
+
+def fitcirc(pts):
+	#least squares circle (Kasa): x^2+y^2 + Ax + By + C = 0, solved by hand so
+	#the tests stay dependency free.  returns (cx, cy, r, worst deviation).
+	M = [[0.0] * 4 for _ in range(3)]
+	for x, y in pts:
+		row = [x, y, 1.0]
+		w = -(x * x + y * y)
+		for i in range(3):
+			for j in range(3):
+				M[i][j] += row[i] * row[j]
+			M[i][3] += row[i] * w
+	for i in range(3):
+		pv = max(range(i, 3), key=lambda r: abs(M[r][i]))
+		M[i], M[pv] = M[pv], M[i]
+		for r in range(3):
+			if r != i and M[i][i]:
+				f = M[r][i] / M[i][i]
+				for c in range(i, 4):
+					M[r][c] -= f * M[i][c]
+	A, B, C = [M[i][3] / M[i][i] for i in range(3)]
+	cx, cy = -A / 2.0, -B / 2.0
+	r = math.sqrt(max(cx * cx + cy * cy - C, 0.0))
+	dev = max(abs(math.hypot(x - cx, y - cy) - r) for x, y in pts)
+	return cx, cy, r, dev
+
+
 FAIL = [0]
 
 
@@ -195,7 +301,8 @@ def main():
 		print('\n[1] the file loads and opens the panel')
 		check('version', g['WB_VERSION'], '1.0')
 		check('workspaceControl created', bool(mc.find('workspaceControl')), True)
-		check('Alt+3 registered', mc.find('hotkey')[0][2].get('k'), '3')
+		check('no hotkey registered', mc.find('hotkey'), [])
+		check('no nameCommand either', mc.find('nameCommand'), [])
 		check('no warnings on load', mc.warnings, [])
 
 		print('\n[2] node names - Maya takes no dots')
@@ -319,6 +426,204 @@ def main():
 		check('a button per tile preset', sum(1 for l in labels if l and 'x' in l and '\n' in l), 8)
 		check('custom size button', 'Custom size...' in labels, True)
 		check('a folder row per model section', labels.count('Refresh'), len(g['WB_SECTIONS']))
+		check('coping preset button', 'Flat 25 x 50' in labels, True)
+		check('a Custom button for tiles and for copings', labels.count('Custom size...'), 2)
+		check('ribs checkbox', [c[2].get('label') for c in mc.find('checkBox')], ['underside ribs'])
+
+		print('\n[12] coping profile maths - no Maya in here')
+		prof = g['WB_COPING_PROFILES']['flat']
+		xs = [x for x, _y in prof]
+		ys = [y for _x, y in prof]
+		check('27 measured points', len(prof), 27)
+		check('width as measured', round(max(xs) - min(xs), 4), 25.0)
+		check('height as measured', round(max(ys) - min(ys), 4), 2.2591)
+		check('sits on the floor', round(min(ys), 4), -0.04)
+		check('cross-section area', round(abs(area(prof)), 4), 27.6757)
+		check('measured loop runs clockwise', area(prof) < 0, True)
+		#the bullnose is an exact circle in the source - if someone "tidies" the
+		#stored decimals this is what notices
+		nose = prof[19:26]
+		_cx, _cy, r, dev = fitcirc(nose)
+		check('bullnose is 7 points', len(nose), 7)
+		check('bullnose radius', round(r, 4), 0.9651)
+		#3.5e-05 is the rounding floor of 4-decimal coordinates, so this is as
+		#circular as the stored numbers can express - it is a true arc, not a fit
+		check('bullnose is an exact arc', dev < 1e-4, True)
+		_cx, _cy, r2, dev2 = fitcirc(prof[0:8])
+		check('grip undercut radius', round(r2, 3), 1.035)
+		check('grip undercut is near-circular', dev2 < 0.03, True)
+
+		same = g['_wbCopingProfile']('flat', 25.0)
+		check('default width is a no-op', same, prof)
+		wide = g['_wbCopingProfile']('flat', 35.0)
+		wx = [x for x, _y in wide]
+		check('wider: back edge moves back', round(min(wx), 4), -28.86)
+		check('wider: nose stays put', round(max(wx), 4), 6.14)
+		check('wider: width comes out right', round(max(wx) - min(wx), 4), 35.0)
+		check('wider: nose detail untouched',
+			  [pt for pt in wide if pt[0] > -13.0], [pt for pt in prof if pt[0] > -13.0])
+		check('wider: still 27 points', len(wide), 27)
+
+		check('ribs at 25cm', [round(c, 4) for c in g['_wbCopingRibs'](prof)],
+			  [-18.32, -15.32, -12.32, -9.32, -6.32, -3.32, -0.32, 2.68])
+		check('8 ribs, as the source model has', len(g['_wbCopingRibs'](prof)), 8)
+		check('a wider coping gets more ribs', len(g['_wbCopingRibs'](wide)), 11)
+		check('last rib stops short of the nose',
+			  round(max(g['_wbCopingRibs'](prof)) + g['WB_RIB_W'] / 2.0, 4), g['WB_RIB_LIMIT'])
+
+		for bad, why in ((15.0, 'too narrow'), (0.0, 'zero')):
+			try:
+				g['_wbCopingProfile']('flat', bad)
+				check('width %s rejected' % why, False, True)
+			except ValueError:
+				check('width %s rejected' % why, True, True)
+		try:
+			g['_wbCopingProfile']('round', 25.0)
+			check('unknown profile rejected', False, True)
+		except ValueError:
+			check('unknown profile rejected', True, True)
+
+		print('\n[13] building a coping')
+		mc.calls = []
+		made = g['wbCoping']()
+		check('one coping made', made, ['coping_flat_25x50_01_geo'])
+		facet = mc.find('polyCreateFacet')[0][2]
+		check('27 point facet', len(facet['p']), 27)
+		check('the loop is reversed for the sweep', facet['p'][0], (6.14, -0.04, 0.0))
+		check('facet is flat in Z', set(pt[2] for pt in facet['p']), set([0.0]))
+		check('swept along the normal by the length',
+			  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], 50.0)
+		check('back cap closed', len(mc.find('polyCloseBorder')), 1)
+		ribs = mc.find('polyCube')
+		check('8 ribs built', len(ribs), 8)
+		check('rib section', (ribs[0][2]['w'], ribs[0][2]['h'], ribs[0][2]['d']), (1.0, 1.3, 50.0))
+		check('ribs merged, not booleaned', len(mc.find('polyUnite')[0][1][0]), 9)
+		check('planar Y projection', mc.find('polyProjection')[0][2]['md'], 'y')
+		check('no UV rotation on a coping',
+			  [c for c in mc.find('polyEditUV') if 'angle' in c[2]], [])
+		#the projection fits the shell to a unit square; a 25 x 50 coping must come
+		#back out at 0.5 x 1.0 or the texture is stretched 2:1 across the width
+		fit = mc.find('polyEditUV')
+		check('shell rescaled to real proportions',
+			  (fit[0][2]['scaleU'], fit[0][2]['scaleV']), (0.5, 1.0))
+		check('scaled about the shell corner',
+			  (fit[0][2]['pivotU'], fit[0][2]['pivotV']), (0.0, 0.0))
+		check('then moved to the 0-1 origin', fit[1][2]['relative'], True)
+
+		mc.calls = []
+		g['wbCoping'](ribs=False)
+		check('ribs off -> no cubes', mc.find('polyCube'), [])
+		check('ribs off -> nothing to unite', mc.find('polyUnite'), [])
+
+		mc.calls = []
+		three = g['wbCoping'](count=3, ribs=False)
+		check('three copings', len(three), 3)
+		check('numbering keeps going', three[-1], 'coping_flat_25x50_05_geo')
+		check('laid out along X by width + 5',
+			  [round(c[1][0], 4) for c in mc.find('move')], [0.0, 30.0, 60.0])
+		check('decimal sizes make a legal name',
+			  g['wbCoping'](width=22.5, length=37.5, ribs=False), ['coping_flat_22p5x37p5_01_geo'])
+
+		for kw, why in (({'length': 0}, 'zero length'), ({'count': 0}, 'zero count'),
+						({'width': 10}, 'too narrow')):
+			try:
+				g['wbCoping'](**kw)
+				check('%s rejected' % why, False, True)
+			except ValueError:
+				check('%s rejected' % why, True, True)
+		print('\n[14] the end cap bevel')
+		mc.calls = []
+		node = g['wbCoping'](ribs=False)[0]
+		bev = mc.find('polyBevel3')
+		check('bevel applied once', len(bev), 1)
+		check('fraction, not an absolute offset', bev[0][2]['offsetAsFraction'], True)
+		check('fraction is 0.03 as dialled in', bev[0][2]['offset'], 0.03)
+		check('one segment', bev[0][2]['segments'], 1)
+		check('depth 1', bev[0][2]['depth'], 1)
+		check('"Fraction" attr set directly too', list(mc.attrs.values()), [0.03])
+		#e[0..26] is the cap loop at Z=0 and e[27..53] the one at Z=length; the
+		#walls e[54..80] run between the two ends and must be left alone
+		edges = bev[0][1][0]
+		check('both cap loops bevelled', len(edges), 54)
+		check('the near cap', edges[0], node + '.e[0]')
+		check('the far cap', edges[-1], node + '.e[53]')
+		check('no wall edge bevelled',
+			  [e for e in edges if int(e.split('[')[1][:-1]) >= 54], [])
+		check('history baked after the bevel', len(mc.find('delete')) >= 1, True)
+
+		mc.calls = []
+		mc.attrs = {}
+		g['wbCoping'](ribs=False, bevel=0)
+		check('bevel 0 -> no polyBevel3', mc.find('polyBevel3'), [])
+
+		mc.calls = []
+		g['wbCoping'](bevel=0.03)
+		check('ribs keep their square ends',
+			  [e for e in mc.find('polyBevel3')[0][1][0] if 'rib' in e], [])
+		check('bevel runs before the ribs are united',
+			  [c[0] for c in mc.calls].index('polyBevel3') <
+			  [c[0] for c in mc.calls].index('polyUnite'), True)
+
+		for bad in (-0.1, 0.5, 1.0):
+			try:
+				g['wbCoping'](bevel=bad)
+				check('bevel %g rejected' % bad, False, True)
+			except ValueError:
+				check('bevel %g rejected' % bad, True, True)
+
+		print('\n[15] UV proportions')
+		#du:dv is width:length, so the shell keeps the object's real aspect
+		for w, l, want in ((25.0, 50.0, (0.5, 1.0)), (50.0, 25.0, (1.0, 0.5)),
+						   (30.0, 30.0, (1.0, 1.0)), (25.0, 100.0, (0.25, 1.0))):
+			mc.calls = []
+			g['wbCoping'](width=w, length=l, ribs=False)
+			e = mc.find('polyEditUV')[0][2]
+			check('%gx%g -> shell %s' % (w, l, want), (e['scaleU'], e['scaleV']), want)
+		mc.calls = []
+		g['_wbFitUV']('someNode', 0, 50.0)
+		check('zero extent is a no-op', mc.find('polyEditUV'), [])
+
+		print('\n[16] relaxing the nose UVs')
+		prof = g['WB_COPING_PROFILES']['flat']
+		check('nose starts at the profile high point', g['_wbNoseX'](prof), 4.7927)
+		check('widening does not move the nose', g['_wbNoseX'](g['_wbCopingProfile']('flat', 40.0)), 4.7927)
+
+		#stub UVs run u = 0..0.5 against X = -18.86..6.14, so only map[18] and map[19]
+		#sit at or beyond the nose at X 4.7927
+		mc.calls = []
+		mc.uvFlip = False
+		node = g['wbCoping'](ribs=False)[0]
+		rel = [c for c in mc.find('polyEditUV') if c[2].get('scaleU') == 2.0]
+		check('one relax call', len(rel), 1)
+		check('only the nose UVs move', rel[0][1][0],
+			  [node + '.map[18]', node + '.map[19]'])
+		check('U only, V untouched', rel[0][2]['scaleV'], 1.0)
+		check('pivot on the inner edge of the nose block',
+			  round(rel[0][2]['pivotU'], 4), round(18 / 19.0 * 0.5, 4))
+
+		#same object with U laid out backwards: the nose is now at low u, so the pivot
+		#has to flip to the other end or the relax would drag the top surface with it
+		mc.calls = []
+		mc.uvFlip = True
+		g['wbCoping'](ribs=False)
+		rel = [c for c in mc.find('polyEditUV') if c[2].get('scaleU') == 2.0]
+		check('flipped U still finds the nose', len(rel[0][1][0]), 2)
+		check('pivot flips to the other end',
+			  round(rel[0][2]['pivotU'], 4), round((1 - 18 / 19.0) * 0.5, 4))
+		mc.uvFlip = False
+
+		mc.calls = []
+		g['wbCoping'](ribs=False, relax=1.0)
+		check('relax 1 -> a plain top projection',
+			  [c for c in mc.find('polyEditUV') if c[2].get('scaleU') not in (0.5, None)], [])
+
+		for bad in (0.5, 0.0, 5.5):
+			try:
+				g['wbCoping'](relax=bad)
+				check('relax %g rejected' % bad, False, True)
+			except ValueError:
+				check('relax %g rejected' % bad, True, True)
+
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
 

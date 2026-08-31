@@ -6,7 +6,8 @@
 #	import urllib.request, __main__
 #	exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeTiles.py').read().decode('utf-8'), __main__.__dict__)
 #
-#Alt+2 re-pulls this file from that address and reopens the browser.
+#It deliberately registers no hotkey - Alt+2 is already taken in the user's
+#Maya, so the browser is opened by running weeTiles().
 #The tile models themselves come from a library.json manifest - see TILELIB.md.
 
 import math
@@ -860,17 +861,6 @@ def weeTiles():
 	_wtWin.show()
 	_wtWin.raise_()
 	return _wtWin
-def _wtRegisterHotkey(key='2', alt=True, ctl=False):
-	#Alt+2 re-pulls this file from GitHub and reopens the browser
-	cmd = ("import urllib.request, __main__\n"
-		   "exec(urllib.request.urlopen('%s?t='+str(__import__('time').time())).read().decode('utf-8'), __main__.__dict__)" % WT_SELF_URL)
-	nc = mc.nameCommand('weeTilesReload', annotation='weeTiles: reload from GitHub',
-						command='python("%s")' % cmd.replace('\n', r'\n').replace('"', r'\"'), sourceType='python')
-	mc.hotkey(k=key, alt=alt, ctl=ctl, name=nc)
 
 
 weeTiles()
-try:
-	_wtRegisterHotkey()
-except Exception as _e:
-	mc.warning('weeTiles: could not register the Alt+2 hotkey - %s' % _e)

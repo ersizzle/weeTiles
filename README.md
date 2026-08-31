@@ -18,8 +18,8 @@ import urllib.request, __main__
 exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeTiles.py').read().decode('utf-8'), __main__.__dict__)
 ```
 
-Opens the browser and registers **Alt+2**, which re-pulls the file and reopens it
-(same idea as weeScript's Alt+1). To reopen without re-downloading, run `weeTiles()`.
+Opens the browser. It registers **no hotkey** — Alt+2 / Alt+3 are already taken in
+Maya — so to reopen it without re-downloading, run `weeTiles()`.
 
 Needs Maya 2022+ — PySide2 on 2022–2024, PySide6 on 2025+, picked automatically.
 
@@ -188,8 +188,8 @@ import urllib.request, __main__
 exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeBuild.py').read().decode('utf-8'), __main__.__dict__)
 ```
 
-Opens the panel and registers **Alt+3** (weeTiles has Alt+2), which re-pulls the file
-and reopens it. To reopen without re-downloading, run `weeBuild()`.
+Opens the panel. It registers **no hotkey** either — to reopen it without
+re-downloading, run `weeBuild()`.
 
 ## Tiles
 
@@ -213,7 +213,55 @@ up from whatever is already in the scene, so pressing a button twice does not cl
 
 Set Grout to `0` for a plain, unchamfered box.
 
-## Grates and Copings
+## Copings
+
+Built procedurally, not imported. The profile is measured straight off
+`flat_coping_natural.gltf`: the real 27-point cross-section, swept along the length,
+with the eight underside ribs merged in.
+
+| Field | Default | What it does |
+| --- | --- | --- |
+| Count | 1 | How many copings to build, in a row along X |
+| Width | 25 | Across the coping, in cm (minimum 20) |
+| Length | 50 | Along the coping, in cm |
+| Bevel | 0.03 | Chamfer on both end cap perimeters, as a *fraction* of the shortest adjacent edge. `0` turns it off |
+| Relax | 2 | Widens the bullnose and front face UVs in U so they are not squashed by the top projection. `1` turns it off |
+| underside ribs | on | Merge the ribbed underside in, as the source model has it |
+
+Changing **Width** stretches only the flat back run. The bullnose (an exact R0.965
+arc), the front lip and the finger-grip undercut keep the shape they were measured
+at — that is the point of rebuilding it rather than importing a fixed mesh. The top
+is not flat: it rises about 0.66cm from the back edge to the nose, as the real
+product does.
+
+UVs are projected planar **from the top** — the way the real tiles are painted — then
+rescaled to the coping's real width:length proportions, so a 25 x 50 lands as a
+0.5 x 1.0 shell at the origin of 0-1 space rather than being stretched 2:1.
+
+Projecting from above compresses anything steep. The top surface and the lip underside
+come out 1:1, but the bullnose lands at 2.18x and the front face at 4.99x. **Relax**
+widens just those two in U (never in V), pivoting on the inner edge so the top surface
+never moves:
+
+| Relax | Effect |
+| --- | --- |
+| 1.0 | Off — a plain top projection |
+| 2.0 | Default. Bullnose 1.09x, front face 2.50x |
+| 2.18 | Bullnose exactly 1:1 |
+| 3.24 | Nose fully unrolled |
+
+Side and back faces are left as the projection puts them — they are never seen.
+
+The two end caps get a small chamfer around their perimeter — one `polyBevel3`, one
+segment, chamfer on. It is applied before the ribs are merged in, so the ribs keep
+square ends where they meet the cap.
+
+Named `coping_flat_<size>_<nn>_geo`, with the same `p`-for-a-dot rule as the tiles.
+
+More profiles (round, half-round, …) are a new entry in `WB_COPING_PROFILES` plus
+one line in `WB_COPINGS` — no other code changes.
+
+## Grates and Coping models
 
 These import model files rather than building them. Point a section at a folder with
 the **…** button (remembered per Maya user), and you get one button per model file in

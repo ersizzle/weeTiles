@@ -22,8 +22,8 @@ code to weeScript or make either import the other.
   import urllib.request, __main__
   exec(urllib.request.urlopen('https://raw.githubusercontent.com/ersizzle/weeTiles/master/weeTiles.py').read().decode('utf-8'), __main__.__dict__)
   ```
-- Bottom of the file calls `weeTiles()` (opens the browser) and registers **Alt+2**,
-  which re-pulls the file from `WT_SELF_URL` and reopens it.
+- Bottom of the file calls `weeTiles()` (opens the browser). **No hotkey is registered**
+  — Alt+2 and Alt+3 are already taken in the user's Maya. Do not add one back.
 - Entry point `weeTiles()`; `WtBrowser` is the window; the open window is kept in `_wtWin`.
 
 ## Conventions (IMPORTANT — keep these)
@@ -92,16 +92,22 @@ download/cache/`rev` busting, spaces in filenames, and settings round-trip.
 
 ## Verified in Maya
 
-Nothing yet — both tools were written and logic-tested outside Maya. Still unconfirmed
-for weeTiles: the Qt layout, `mc.file` import of the real FBX files, the viewport drop
-hook, and `_wtTrim`. For weeBuild: the panel layout and the real `polyBevel3` /
-`polyProjection` result. Ask the user before assuming any of these work.
+**Confirmed working** (user screenshot, 2026-08-31): the weeBuild panel opens, and the
+coping sweep builds correctly — `polyCreateFacet` on the 27-point *concave* profile,
+`polyExtrudeFacet`, the `polyCloseBorder` back cap, outward-facing wall normals, and the
+ribs. The bullnose and grip undercut read correctly in the viewport.
+
+Still unconfirmed. weeTiles: the Qt layout, `mc.file` import of the real FBX files, the
+viewport drop hook, and `_wtTrim`. weeBuild: the tile `polyBevel3` recipe, the coping
+**end cap bevel** (added after that screenshot) and the `polyProjection` UV result on
+both. Ask the user before assuming any of these work.
 
 ##############################################################################
 
 # weeBuild (`weeBuild.py`)
 
-A weeScript-style dockable button panel: **Tiles**, **Grates**, **Copings**.
+A weeScript-style dockable button panel: **Tiles**, **Copings** (both built
+procedurally), then **Grates** / **Coping models** (imported from a folder).
 `buildTiles.py` in this folder is the weeScript excerpt it was built from — reference
 only, not loaded by anything.
 
@@ -109,7 +115,7 @@ only, not loaded by anything.
 
 - Same exec-the-raw-file pattern as the others; `WB_SELF_URL` points at
   `.../weeTiles/master/weeBuild.py`.
-- Bottom of the file calls `weeBuild()` and registers **Alt+3** (weeTiles owns Alt+2).
+- Bottom of the file calls `weeBuild()`. **No hotkey** — see the weeTiles note above.
 - `weeBuild()` makes the `workspaceControl` whose `uiScript` is `'wbUI()'`, so **`wbUI`
   must stay a module-level name in `__main__`** and must be re-runnable — Maya calls it
   again whenever it restores the panel. It rebuilds `_wbFields` / `_wbCols` each time.
@@ -143,26 +149,69 @@ Regions in file order, marked with banner comments:
    it is proven in the user's pipeline. Geometry still straddles Y=0, as in weeScript;
    only the pivot goes to the bottom. `wbTile` is the scriptable entry point; presets
    live in `WB_TILES` as `(label, short, long)` — **long edge along X, short along Z**.
-4. **models** — `_wbModelFiles`, `wbImport` (ported from weeTiles' `_wtImportOne`: diff
+4. **copings** — `_wbCopingProfile`/`_wbCopingRibs` are **pure, no Maya**, so they are
+   unit-testable like weeTiles' `_wtLayout`. `_wbBuildCoping` sweeps the profile with
+   `polyCreateFacet` → `polyExtrudeFacet(localTranslateZ=…)` → `polyCloseBorder`, then
+   merges the ribs with `polyUnite` and gives it planar-Y UVs (**no** 90° rotation —
+   the length already runs along Z). `wbCoping` is the scriptable entry point.
+   - `WB_COPING_PROFILES['flat']` is **measured off `tile_models/copings/`
+     `flat_coping_natural.gltf`** — 27 (X, Y) points of the real swept cross-section.
+     The bullnose is an exact **R0.9651** arc (deviation 3.5e-05, the rounding floor of
+     4-decimal coords) and the grip undercut **R≈1.035**. **Do not round these decimals**
+     — the arcs stop being circular and check `[12]` will catch it.
+   - The measured loop runs **clockwise**, so `_wbBuildCoping` reverses it; otherwise
+     the swept walls face inward.
+   - Widening moves only points with `X <= WB_COPING_BACK` (−13.0), i.e. the flat back
+     run. The nose, lip and undercut keep their measured shape — that is the whole
+     point of rebuilding it procedurally rather than importing.
+   - The top is **not flat** (1.56 at the back edge rising to 2.2191 at the nose) and
+     the user confirmed that is correct. Don't level it.
+   - Ribs interpenetrate the slab rather than being booleaned — that is what the source
+     model does, so it is deliberate.
+   - UVs: `polyProjection` planar from **+Y (top)** — this is deliberate and matches how
+     the real tiles are laser-painted from above, so **do not replace it with an unroll**.
+     Then `_wbFitUV` rescales the shell to the object's real width:length (a planar
+     projection fits to a unit square on its own, squashing a 25×50 coping 2:1), and
+     `_wbRelaxUV` widens the nose. **No** 90° rotation (unlike the tiles) since the
+     length already runs along Z.
+   - A top projection maps each face by its X span, so it compresses whatever is steep:
+     top surface and lip underside 1.00×, underside 1.05×, grip undercut 1.12×,
+     **bullnose 2.18×**, **front face 4.99×**, back face collapses (it is vertical).
+     The user does not need side or back faces, so only the nose is corrected.
+   - `_wbRelaxUV` scales UVs whose vertex sits at X ≥ `_wbNoseX(profile)` (the profile's
+     high point, 4.7927) by `WB_COPING_RELAX` in **U only**. The pivot is whichever end
+     of the nose block faces the rest of the shell, so the top surface never moves and
+     the shell only grows outward — that also makes it independent of which way round
+     Maya laid U out, which the tests check both ways. 1.0 = plain top projection,
+     2.18 = bullnose exactly 1:1, 3.24 = nose fully unrolled.
+   - `_wbCapEdges` picks the two end cap perimeters (both of an edge's verts at the same
+     Z) and `polyBevel3` chamfers them: **fraction** `WB_COPING_BEVEL` = 0.03, 1 segment,
+     chamfer on — the settings the user dialled in by hand. It runs **before** the ribs
+     are united, so the ribs keep square ends. The `fraction` attribute is also set with
+     `setAttr` after the call, because in some Maya versions it is a separate attribute
+     from `offset` and the `offsetAsFraction` flag alone does not land the value.
+5. **models** — `_wbModelFiles`, `wbImport` (ported from weeTiles' `_wtImportOne`: diff
    `mc.ls(assemblies=True)`, keep roots containing a mesh, rename `<file>_geo`, drop
    pivot), `wbSetFolder`, `wbRefresh`.
-5. **UI** — `_wbRow`/`_wbNums`/`_wbLabel`/`_wbFolderRow` (module level, not closures, so
+6. **UI** — `_wbRow`/`_wbNums`/`_wbCheck`/`_wbLabel`/`_wbFolderRow` (module level, not closures, so
    `_wbFillModels` can rebuild rows on Refresh), `_wbFillModels`, `wbUI`.
 
 ## Adding a section
 
-`WB_SECTIONS = [('grates', 'Grates'), ('copings', 'Copings')]` — one more tuple adds a
+`WB_SECTIONS = [('grates', 'Grates'), ('copings', 'Coping models')]` — one more tuple adds a
 whole section: folder field, browse, Refresh, and one import button per model file
 found. No other code changes.
 
 ## Testing (weeBuild)
 
 `python tests/test_build_logic.py` — stubs `maya.cmds`/`maya.mel` with a recorder and
-exec's the *whole* file, so loading the panel and registering the hotkey are covered
-too. The stub answers enough poly queries to trace a real build: faces are `.f[0]`…
+exec's the *whole* file, so loading the panel is covered too (and `[1]` asserts that no
+hotkey is registered). The stub answers enough poly queries to trace a real build: faces are `.f[0]`…
 `.f[5]` with "world Y" = the index, so `.f[5]` is always the top. Checks cover name
 sanitising, all 8 presets making legal distinct names, the polyCube dims (long→X,
 short→Z), bevel offset, X spacing, numbering across repeat presses, rejected arguments,
+the coping profile (bbox, area, winding, both fitted arc radii, width stretching, rib
+layout) and the coping build (reversed loop, sweep length, rib section, unite, UVs),
 folder scanning (spaces, case-blind sort, non-model files, subfolders), import
 root-picking and clash-free renaming, and the panel actually building its buttons.
 
