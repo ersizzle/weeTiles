@@ -220,44 +220,42 @@ Set Grout to `0` for a plain, unchamfered box.
 
 ## Copings
 
-Built procedurally, not imported. The profile is measured straight off
-`flat_coping_natural.gltf`: the real 27-point cross-section, swept along the length,
-with the eight underside ribs merged in.
+Built procedurally, not imported. Each profile is the real swept cross-section measured
+straight off the model in `tile_models/copings/`, so the nose, lip, channel and undercut
+are the shapes the product actually has — not an approximation.
+
+| Button | Profile | Notes |
+| --- | --- | --- |
+| Flat 25 x 50 | `flat` | Bullnose + finger-grip undercut, ribbed underside. Top is not level — it rises 0.66cm to the nose |
+| Overflow 25 x 50 | `overflow` | A 25 x 1.20 bar rounded at **both** top edges, exactly symmetric |
+| Channel 25 x 50 | `channel` | 25 x 1.60 with a channel 4.03 wide, 0.75 deep, S-curve walls |
+| Channel 30 x 50 | `channel` | The same profile widened |
 
 | Field | Default | What it does |
 | --- | --- | --- |
-| Count | 1 | How many copings to build, in a row along X |
-| Width | 25 | Across the coping, in cm (minimum 20) |
-| Length | 50 | Along the coping, in cm |
+| Count | 1 | How many to build, in a row along X |
+| Width | per profile | Across the coping, in cm |
+| Length | per profile | Along the coping, in cm |
 | Bevel | 0.03 | Chamfer on both end cap perimeters, as a *fraction* of the shortest adjacent edge. `0` turns it off |
-| Relax | 2 | Gives the bullnose and front face a bigger share of the UV square, in U only. `1` turns it off |
-| underside ribs | on | Merge the ribbed underside in, as the source model has it |
+| Relax | 2 | Gives the squashed nose(s) a bigger share of the UV square, in U only. `1` turns it off |
+| underside ribs | per profile | On for `flat`, off for the others |
 
-Changing **Width** stretches only the flat back run. The bullnose (an exact R0.965
-arc), the front lip and the finger-grip undercut keep the shape they were measured
-at — that is the point of rebuilding it rather than importing a fixed mesh. The top
-is not flat: it rises about 0.66cm from the back edge to the nose, as the real
-product does.
+Changing **Width** stretches only the flat back run. Every nose, lip, channel and
+undercut keeps its measured shape — which is the point of rebuilding these rather than
+importing a fixed mesh. So `Channel 30 x 50` is the 25cm profile with 5cm more flat
+behind it, exactly as the real product varies.
 
-UVs are projected planar **from the top** — the way the real tiles are painted — and
-the shell is then stretched to fill **the whole 0-1 square**, so the texture registers.
+Named `coping_<profile>_<size>_<nn>_geo`, with the same `p`-for-a-dot rule as the tiles —
+`coping_channel_30x50_01_geo`.
 
-Projecting from above compresses anything steep. The top surface and the lip underside
-come out true, but the bullnose is squashed 2.18x and the front face 4.99x. **Relax**
-gives just those two a bigger share of the square, widening them in U only (never in V)
-and pivoting on the inner edge so the top surface does not shift. `1` turns it off,
-`2` is the default, `2.18` gives the bullnose the share it would have laid flat.
+UVs are projected planar **from the top** — the way the real tiles are painted — and the
+shell is then stretched to fill **the whole 0-1 square**, so the texture registers.
+Projecting from above compresses anything steep, so **Relax** gives the rounded ends a
+bigger share; on the overflow bar it does both ends. Side and back faces are left as the
+projection puts them, since they are never seen.
 
-Side and back faces are left as the projection puts them — they are never seen.
-
-The two end caps get a small chamfer around their perimeter — one `polyBevel3`, one
-segment, chamfer on. It is applied before the ribs are merged in, so the ribs keep
-square ends where they meet the cap.
-
-Named `coping_flat_<size>_<nn>_geo`, with the same `p`-for-a-dot rule as the tiles.
-
-More profiles (round, half-round, …) are a new entry in `WB_COPING_PROFILES` plus
-one line in `WB_COPINGS` — no other code changes.
+More profiles are one record in `WB_COPING_PROFILES` plus one line in `WB_COPINGS` — no
+other code changes.
 
 ## Grates and Coping models
 

@@ -45,30 +45,92 @@ WB_SPACE = 5.0       #gap between tiles when several are built at once
 #coping presets in panel order: (label, profile key, width cm, length cm).
 WB_COPINGS = [
 	('Flat 25 x 50', 'flat', 25.0, 50.0),
+	('Overflow 25 x 50', 'overflow', 25.0, 50.0),
+	('Channel 25 x 50', 'channel', 25.0, 50.0),
+	('Channel 30 x 50', 'channel', 30.0, 50.0),
 ]
-#the 'flat' profile is measured straight off tile_models/copings/
-#flat_coping_natural.gltf - 27 (X, Y) points of the swept cross-section, in cm,
-#in the file's own order (clockwise, so _wbBuildCoping reverses it).  X runs
-#from the back edge at -18.86 to the nose at +6.14, Y sits on the floor at
-#-0.04.  the bullnose is an exact R0.9651 arc and the grip undercut R~1.035;
-#do not round these off, the arcs stop being circular.
+#each profile is the real swept cross-section measured off the model in
+#tile_models/copings, plus the few facts the build needs about it:
+#  pts   (X, Y) points of the loop, in cm, in whatever order they were traced -
+#        _wbCCW orients it, so the stored winding does not matter
+#  back  points at or behind this X move when the width changes; everything in
+#        front keeps the shape it was measured at
+#  noses (side, X) ends that a top projection squashes, for _wbRelaxUV.  side 1
+#        means X >= that value, -1 means X <= it
+#  ribs  whether this profile has the underside ribs
+#  size  the (width, length) it was measured at
 WB_COPING_PROFILES = {
-	'flat': [
-		(5.1198, 0.0122), (5.0684, 0.263), (5.0147, 0.4942),
-		(4.8965, 0.7195), (4.716, 0.9121), (4.49, 1.0486),
-		(4.2451, 1.1175), (4.0078, 1.1219), (-0.4046, 0.8465),
-		(-1.2334, 0.7948), (-6.3987, 0.5783), (-7.2281, 0.5435),
-		(-12.36, 0.4735), (-13.1449, 0.4628), (-18.86, 0.4628),
-		(-18.86, 1.56), (-12.36, 1.56), (-6.4432, 1.6408),
-		(-0.4485, 1.892), (4.7927, 2.2191), (5.03, 2.2147),
-		(5.2749, 2.1458), (5.5009, 2.0093), (5.6814, 1.8167),
-		(5.7997, 1.5914), (5.8533, 1.3603), (6.14, -0.04),
-	],
+	#the pool coping measured off flat_coping_natural.gltf.  bullnose is an exact
+	#R0.9651 arc and the grip undercut R~1.035 - do not round these decimals off.
+	#the top is not flat: 1.56 at the back edge rising to 2.2191 at the nose.
+	#the only profile with underside ribs.
+	'flat': {
+		'pts': [
+			(5.1198, 0.0122), (5.0684, 0.263), (5.0147, 0.4942),
+			(4.8965, 0.7195), (4.716, 0.9121), (4.49, 1.0486),
+			(4.2451, 1.1175), (4.0078, 1.1219), (-0.4046, 0.8465),
+			(-1.2334, 0.7948), (-6.3987, 0.5783), (-7.2281, 0.5435),
+			(-12.36, 0.4735), (-13.1449, 0.4628), (-18.86, 0.4628),
+			(-18.86, 1.56), (-12.36, 1.56), (-6.4432, 1.6408),
+			(-0.4485, 1.892), (4.7927, 2.2191), (5.03, 2.2147),
+			(5.2749, 2.1458), (5.5009, 2.0093), (5.6814, 1.8167),
+			(5.7997, 1.5914), (5.8533, 1.3603), (6.14, -0.04),
+		],
+		'back': -13.0,
+		'noses': [(1, 4.7927)],
+		'ribs': True,
+		'minw': 20.0,
+		'size': (25.0, 50.0),
+	},
+	#linear_overflow_coping_natural: a 25 x 1.20 bar with BOTH top corners rounded,
+	#exactly symmetric about x = -6.36.  both arcs are exact quarter circles of
+	#R0.9650 - the same tooling radius as the flat coping's bullnose.  two noses,
+	#so the UV relax has to widen each end.
+	'overflow': {
+		'pts': [
+			(-18.86, 0.01), (6.14, 0.01), (6.14, 0.245),
+			(6.1108, 0.4805), (6.0167, 0.7169), (5.8574, 0.9274),
+			(5.6469, 1.0867), (5.4105, 1.1808), (5.175, 1.21),
+			(-17.895, 1.21), (-18.1305, 1.1808), (-18.3669, 1.0867),
+			(-18.5774, 0.9274), (-18.7367, 0.7169), (-18.8308, 0.4805),
+			(-18.86, 0.245),
+		],
+		'back': -6.36,
+		'noses': [(1, 5.175), (-1, -17.895)],
+		'ribs': False,
+		'minw': 8.0,
+		'size': (25.0, 50.0),
+	},
+	#coping_natural: 25 x 1.60, with a channel 4.03 wide at the top narrowing to
+	#1.97 at the floor, 0.75 deep, S-curve walls symmetric about x = 0.44.  unlike
+	#the other two its curves are NOT exact circles (the bullnose fits R0.99 to only
+	#6e-03), so it was not generated from a clean radius.
+	'channel': {
+		'pts': [
+			(-18.86, 0.037), (-18.86, 1.483), (-18.783, 1.56),
+			(-1.576, 1.56), (-1.4251, 1.5383), (-1.2625, 1.4906),
+			(-1.1497, 1.4024), (-1.0989, 1.3155), (-1.06, 1.249),
+			(-1.0405, 1.1745), (-1.0234, 1.1088), (-0.9495, 0.9799),
+			(-0.8901, 0.9205), (-0.7612, 0.8466), (-0.6955, 0.8295),
+			(-0.544, 0.81), (1.424, 0.81), (1.5755, 0.8295),
+			(1.6412, 0.8466), (1.7701, 0.9205), (1.8295, 0.9799),
+			(1.9034, 1.1088), (1.9205, 1.1745), (1.94, 1.249),
+			(1.9789, 1.3155), (2.0297, 1.4024), (2.1425, 1.4906),
+			(2.3051, 1.5383), (2.456, 1.56), (5.098, 1.26),
+			(5.2506, 1.2456), (5.4546, 1.2067), (5.5946, 1.15),
+			(5.793, 1.0196), (5.8996, 0.913), (6.03, 0.7146),
+			(6.0867, 0.5746), (6.1256, 0.3706), (6.14, 0.218),
+			(6.14, 0.037), (6.063, -0.04), (-18.783, -0.04),
+		],
+		'back': -2.0,
+		'noses': [(1, 5.098)],
+		'ribs': False,
+		'minw': 10.0,
+		'size': (25.0, 50.0),
+	},
 }
-WB_COPING_W = 25.0     #width the profile above was measured at
-WB_COPING_L = 50.0     #sweep length of the source model
-WB_COPING_MINW = 20.0  #below this the flat back run would be stretched away
-WB_COPING_BACK = -13.0 #points at or behind this X move when the width changes
+WB_COPING_W = 25.0     #fallback width / length when a profile has no size
+WB_COPING_L = 50.0
 WB_RIB_W = 1.0         #underside rib: 1.0 wide, 1.3 tall, 3.0 pitch, full length
 WB_RIB_H = 1.3
 WB_RIB_Y0 = -0.036     #rib underside, level with the nose at -0.04
@@ -273,18 +335,46 @@ def wbTileCustom():
 #  copings - a measured profile swept along Z, with the underside ribs merged in
 ##############################################################################
 
+def _wbCopingSpec(kind):
+	s = WB_COPING_PROFILES.get(kind)
+	if not s:
+		raise ValueError('unknown coping profile "%s" - have %s.'
+						 % (kind, ', '.join(sorted(WB_COPING_PROFILES))))
+	return s
+def _wbArea(profile):
+	#signed area of the closed loop; the sign is its winding
+	n = len(profile)
+	return sum(profile[i][0] * profile[(i + 1) % n][1] - profile[(i + 1) % n][0] * profile[i][1]
+			   for i in range(n)) / 2.0
+def _wbCCW(profile):
+	#polyCreateFacet takes the face normal from the winding and the sweep runs +Z, so
+	#the loop must go counter clockwise or the walls come out facing inward.  which way
+	#a stored profile runs depends on how it was traced out of the source file, so this
+	#measures rather than assumes - the three stored profiles do not agree.
+	return list(profile) if _wbArea(profile) > 0 else list(reversed(profile))
+def _wbCopingShift(spec, width):
+	#how far the back edge has to move to reach 'width'
+	xs = [x for x, _y in spec['pts']]
+	return float(width) - (max(xs) - min(xs))
 def _wbCopingProfile(kind, width):
-	#the stored profile stretched to 'width'.  only the flat back run stretches:
-	#the bullnose arc, the front lip and the grip undercut keep the shape they
-	#were measured at, which is the whole point of rebuilding this procedurally.
-	prof = WB_COPING_PROFILES.get(kind)
-	if not prof:
-		raise ValueError('unknown coping profile "%s".' % kind)
+	#the stored profile stretched to 'width'.  only the flat run behind spec['back']
+	#moves: every nose, lip, channel and undercut keeps the shape it was measured at,
+	#which is the whole point of rebuilding these procedurally.
+	spec = _wbCopingSpec(kind)
 	width = float(width)
-	if width < WB_COPING_MINW:
-		raise ValueError('coping width must be at least %gcm.' % WB_COPING_MINW)
-	dx = width - WB_COPING_W
-	return [((x - dx) if x <= WB_COPING_BACK else x, y) for x, y in prof]
+	if width < spec['minw']:
+		raise ValueError('%s coping width must be at least %gcm.' % (kind, spec['minw']))
+	dx = _wbCopingShift(spec, width)
+	back = spec['back']
+	return [((x - dx) if x <= back else x, y) for x, y in spec['pts']]
+def _wbCopingNoses(kind, width):
+	#the nose thresholds, moved by the same rule as the points - otherwise widening a
+	#profile whose nose sits behind 'back' (the overflow bar's left bullnose) would
+	#leave the threshold behind and relax the wrong part of the shell
+	spec = _wbCopingSpec(kind)
+	dx = _wbCopingShift(spec, float(width))
+	back = spec['back']
+	return [(side, (x - dx) if x <= back else x) for side, x in spec['noses']]
 def _wbCopingRibs(profile):
 	#rib centres in X.  they start just inside the back edge and march forward on
 	#a fixed pitch, stopping short of the nose - the source model has 8 of them
@@ -304,34 +394,38 @@ def _wbCapEdges(node, length, tol=1e-4):
 		if abs(min(zs)) < tol or abs(min(zs) - length) < tol:
 			out.append(e)
 	return out
-def _wbNoseX(profile):
-	#the bullnose starts at the profile's high point; everything at or beyond that X
-	#is nose and front face, which is exactly what a top projection compresses
-	return max(profile, key=lambda p: p[1])[0]
-def _wbRelaxUV(node, nose_x, factor):
-	#widen the nose UVs in U only.  the pivot is whichever end of the nose block
-	#faces the rest of the shell, so the top surface never moves - the shell only
-	#ever grows outward.  works whichever way round Maya laid U out.
-	if factor == 1.0:
+def _wbRelaxUV(node, noses, factor):
+	#widen the squashed ends in U only.  each nose is scaled about whichever end of its
+	#own block faces the rest of the shell, so the middle never moves and the shell only
+	#grows outward - which also makes this independent of which way round Maya laid U
+	#out.  only ends can be treated this way: growing an interior run (the channel
+	#profile's walls) would need everything beyond it shifted too, so those are left.
+	if factor == 1.0 or not noses:
 		return []
 	uvs = mc.ls(node + '.map[*]', flatten=True)
 	if not uvs:
 		return []
-	sel, selu, allu = [], [], []
+	#one pass pairing every UV with the X of the vertex it belongs to
+	info = []
 	for uv in uvs:
 		u = mc.polyEditUV(uv, q=True)[0]
-		allu.append(u)
 		vtx = mc.ls(mc.polyListComponentConversion(uv, fuv=True, tv=True), flatten=True)
-		if vtx and mc.pointPosition(vtx[0], world=True)[0] >= nose_x - 1e-4:
-			sel.append(uv)
-			selu.append(u)
-	if not sel:
-		return []
+		info.append((uv, u, mc.pointPosition(vtx[0], world=True)[0] if vtx else None))
+	allu = [u for _uv, u, _x in info]
 	centre = (min(allu) + max(allu)) / 2.0
-	lo, hi = min(selu), max(selu)
-	pivot = lo if abs(lo - centre) < abs(hi - centre) else hi
-	mc.polyEditUV(sel, pivotU=pivot, pivotV=0.0, scaleU=factor, scaleV=1.0)
-	return sel
+	moved = []
+	for side, xth in noses:
+		sel = [(uv, u) for uv, u, x in info if x is not None
+			   and (x >= xth - 1e-4 if side > 0 else x <= xth + 1e-4)]
+		if not sel:
+			continue
+		us = [u for _uv, u in sel]
+		lo, hi = min(us), max(us)
+		pivot = lo if abs(lo - centre) < abs(hi - centre) else hi
+		mc.polyEditUV([uv for uv, _u in sel], pivotU=pivot, pivotV=0.0,
+					  scaleU=factor, scaleV=1.0)
+		moved.append([uv for uv, _u in sel])
+	return moved
 def _wbFitUV(node):
 	#stretch the shell to fill 0-1 in BOTH directions.  the textures are authored to
 	#fill the square, so the shell has to fill it too - keeping real world width to
@@ -347,13 +441,11 @@ def _wbFitUV(node):
 	mc.polyEditUV(uvs, pivotU=u0, pivotV=v0, scaleU=1.0 / (u1 - u0), scaleV=1.0 / (v1 - v0))
 	mc.polyEditUV(uvs, relative=True, uValue=-u0, vValue=-v0)
 def _wbBuildCoping(profile, length, name, offset_x, ribs=True, bevel=WB_COPING_BEVEL,
-				   relax=WB_COPING_RELAX):
+				   relax=WB_COPING_RELAX, noses=()):
 	#one coping: profile facet -> sweep along +Z -> cap the back -> merge the
 	#ribs in -> planar-Y UVs -> centre it and drop the pivot to bottom centre.
-	#the measured loop runs clockwise in XY so its facet normal would point -Z;
-	#reversing it makes the sweep come out with the walls facing outward.
 	length = float(length)
-	pts = [(x, y, 0.0) for x, y in reversed(profile)]
+	pts = [(x, y, 0.0) for x, y in _wbCCW(profile)]
 	body = mc.polyCreateFacet(p=pts, name=name)[0]
 	mc.polyExtrudeFacet(body + '.f[0]', constructionHistory=True, keepFacesTogether=True, localTranslateZ=length)
 	mc.delete(body, constructionHistory=True)
@@ -397,7 +489,7 @@ def _wbBuildCoping(profile, length, name, offset_x, ribs=True, bevel=WB_COPING_B
 	try:
 		#relax first and fit second, so the nose keeps the extra share of U it was
 		#given once the shell is stretched out to fill the square
-		_wbRelaxUV(body, _wbNoseX(profile), relax)
+		_wbRelaxUV(body, noses, relax)
 	except Exception as e:
 		#never lose finished geometry over a UV tweak
 		mc.warning('weeBuild: could not relax the nose UVs on %s - %s' % (name, e))
@@ -406,10 +498,15 @@ def _wbBuildCoping(profile, length, name, offset_x, ribs=True, bevel=WB_COPING_B
 	mc.move(offset_x - (bb[0] + bb[3]) / 2.0, 0, -(bb[2] + bb[5]) / 2.0, body, relative=True)
 	_wbBottomPivot(body)
 	return body
-def wbCoping(kind='flat', width=WB_COPING_W, length=WB_COPING_L, count=1, ribs=True,
+def wbCoping(kind='flat', width=None, length=None, count=1, ribs=None,
 			 bevel=WB_COPING_BEVEL, relax=WB_COPING_RELAX, spacing=WB_SPACE):
-	#build 'count' copings of the given profile in a row along X
-	width, length = float(width), float(length)
+	#build 'count' copings of the given profile in a row along X.  width, length and
+	#ribs default to whatever the profile itself was measured with.
+	spec = _wbCopingSpec(kind)
+	size = spec.get('size') or (WB_COPING_W, WB_COPING_L)
+	width = float(size[0] if width is None else width)
+	length = float(size[1] if length is None else length)
+	ribs = spec['ribs'] if ribs is None else bool(ribs)
 	count = int(count)
 	if length <= 0:
 		raise ValueError('coping length must be greater than 0.')
@@ -423,17 +520,21 @@ def wbCoping(kind='flat', width=WB_COPING_W, length=WB_COPING_L, count=1, ribs=T
 		raise ValueError('coping UV relax must be between 1 (a plain top projection) and 5.')
 	token = _wbSafe('%gx%g' % (width, length), fragment=True) or 'coping'
 	prof = _wbCopingProfile(kind, width)
+	noses = _wbCopingNoses(kind, width)
 	made = []
 	for i in range(count):
 		nm = _wbUnique('coping_' + _wbSafe(kind, fragment=True) + '_' + token + '_%02d_geo')
-		made.append(_wbBuildCoping(prof, length, nm, i * (width + spacing), ribs, bevel, relax))
+		made.append(_wbBuildCoping(prof, length, nm, i * (width + spacing), ribs, bevel,
+								   relax, noses))
 	mc.select(made)
-	print('weeBuild: built %d coping(s) at %g x %gcm: %s' % (count, width, length, ', '.join(made)))
+	print('weeBuild: built %d %s coping(s) at %g x %gcm: %s'
+		  % (count, kind, width, length, ', '.join(made)))
 	return made
 def _wbCopingBtn(kind, width, length):
 	#a preset button: the panel fields win, the preset supplies the fallback
 	return wbCoping(kind, width=_wbNum('cwidth', width), length=_wbNum('clength', length),
-					count=_wbNum('ccount', 1, integer=True), ribs=_wbFlag('cribs', True),
+					count=_wbNum('ccount', 1, integer=True),
+					ribs=_wbFlag('cribs', _wbCopingSpec(kind)['ribs']),
 					bevel=_wbNum('cbevel', WB_COPING_BEVEL),
 					relax=_wbNum('crelax', WB_COPING_RELAX))
 def wbCopingCustom():
@@ -628,8 +729,10 @@ def wbUI():
 	_wbNums(f, [('ccount', 'Count', '1'), ('cwidth', 'Width', '%g' % WB_COPING_W), ('clength', 'Length', '%g' % WB_COPING_L)])
 	_wbNums(f, [('cbevel', 'Bevel', '%g' % WB_COPING_BEVEL), ('crelax', 'Relax', '%g' % WB_COPING_RELAX)])
 	_wbCheck(f, 'cribs', 'underside ribs', True, 'merge the ribbed underside in, the way the source model has it')
-	_wbRow(f, [(_wbWrap(lbl), (lambda _k=k, _w=w, _l=l: _wbCopingBtn(_k, _w, _l)), 'teal',
-				'build the %s coping profile at %g x %gcm' % (k, w, l)) for lbl, k, w, l in WB_COPINGS])
+	for i in range(0, len(WB_COPINGS), 2):
+		_wbRow(f, [(lbl.replace(' ', chr(10), 1), (lambda _k=k, _w=w, _l=l: _wbCopingBtn(_k, _w, _l)), 'teal',
+					'build the %s coping profile at %g x %gcm' % (k, w, l))
+				   for lbl, k, w, l in WB_COPINGS[i:i + 2]])
 	_wbRow(f, [('Custom size...', wbCopingCustom, 'amber', 'build a coping at any width x length')])
 
 	for key, label in WB_SECTIONS:

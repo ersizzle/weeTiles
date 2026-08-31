@@ -450,15 +450,22 @@ def main():
 		mc.calls = []
 		g['wbUI']()
 		labels = [c[2].get('label') for c in mc.find('button')]
-		check('a button per tile preset', sum(1 for l in labels if l and 'x' in l and '\n' in l), 8)
+		tilebtn = [l for l in labels if l and l.replace('\n', ' ').replace('x', '').replace(' ', '')
+				   .replace('.', '').isdigit()]
+		check('a button per tile preset', len(tilebtn), 8)
 		check('custom size button', 'Custom size...' in labels, True)
 		check('a folder row per model section', labels.count('Refresh'), len(g['WB_SECTIONS']))
-		check('coping preset button', 'Flat 25 x 50' in labels, True)
+		check('a button per coping preset',
+			  sum(1 for l in labels if l and l.replace('\n', ' ') in
+				  [c[0] for c in g['WB_COPINGS']]), len(g['WB_COPINGS']))
+		check('four coping presets', len(g['WB_COPINGS']), 4)
+		check('all three profiles offered',
+			  sorted(set(c[1] for c in g['WB_COPINGS'])), ['channel', 'flat', 'overflow'])
 		check('a Custom button for tiles and for copings', labels.count('Custom size...'), 2)
 		check('ribs checkbox', [c[2].get('label') for c in mc.find('checkBox')], ['underside ribs'])
 
 		print('\n[12] coping profile maths - no Maya in here')
-		prof = g['WB_COPING_PROFILES']['flat']
+		prof = g['WB_COPING_PROFILES']['flat']['pts']
 		xs = [x for x, _y in prof]
 		ys = [y for _x, y in prof]
 		check('27 measured points', len(prof), 27)
@@ -491,6 +498,8 @@ def main():
 			  [pt for pt in wide if pt[0] > -13.0], [pt for pt in prof if pt[0] > -13.0])
 		check('wider: still 27 points', len(wide), 27)
 
+		check('only the flat profile has ribs',
+			  [k for k, v in sorted(g['WB_COPING_PROFILES'].items()) if v['ribs']], ['flat'])
 		check('ribs at 25cm', [round(c, 4) for c in g['_wbCopingRibs'](prof)],
 			  [-18.32, -15.32, -12.32, -9.32, -6.32, -3.32, -0.32, 2.68])
 		check('8 ribs, as the source model has', len(g['_wbCopingRibs'](prof)), 8)
@@ -622,9 +631,15 @@ def main():
 		mc.uvBB = ((0.0, 1.0), (0.0, 1.0))
 
 		print('\n[16] relaxing the nose UVs')
-		prof = g['WB_COPING_PROFILES']['flat']
-		check('nose starts at the profile high point', g['_wbNoseX'](prof), 4.7927)
-		check('widening does not move the nose', g['_wbNoseX'](g['_wbCopingProfile']('flat', 40.0)), 4.7927)
+		check('flat has one nose', g['_wbCopingNoses']('flat', 25.0), [(1, 4.7927)])
+		check('widening does not move it', g['_wbCopingNoses']('flat', 40.0), [(1, 4.7927)])
+		#the overflow bar is rounded at BOTH ends, and its left nose sits behind
+		#'back', so widening has to carry that threshold along with the points
+		check('overflow has two noses', g['_wbCopingNoses']('overflow', 25.0),
+			  [(1, 5.175), (-1, -17.895)])
+		check('widening moves only the one behind back',
+			  g['_wbCopingNoses']('overflow', 30.0), [(1, 5.175), (-1, -22.895)])
+		check('channel has one nose', g['_wbCopingNoses']('channel', 25.0), [(1, 5.098)])
 
 		#stub UVs run u = 0..0.5 against X = -18.86..6.14, so only map[18] and map[19]
 		#sit at or beyond the nose at X 4.7927
@@ -699,6 +714,76 @@ def main():
 		check('and creates nothing',
 			  [c for c in mc.find('hotkeySet') if c[2].get('source')], [])
 		mc.hotkeySetCur = 'Maya_Default'
+
+		print('\n[18] all three coping profiles')
+		P = g['WB_COPING_PROFILES']
+		check('three profiles', sorted(P), ['channel', 'flat', 'overflow'])
+		facts = {'flat': (27, 25.0, 2.2591), 'overflow': (16, 25.0, 1.2),
+				 'channel': (42, 25.0, 1.6)}
+		for kind, (npt, w, h) in sorted(facts.items()):
+			pts = P[kind]['pts']
+			xs = [x for x, _y in pts]
+			ys = [y for _x, y in pts]
+			check('%-8s %d points' % (kind, npt), len(pts), npt)
+			check('%-8s %g x %g cm' % (kind, w, h),
+				  (round(max(xs) - min(xs), 4), round(max(ys) - min(ys), 4)), (w, h))
+			check('%-8s measured size' % kind, P[kind]['size'], (25.0, 50.0))
+
+		#the stored profiles do NOT agree on winding - which is exactly why the build
+		#orients them itself rather than reversing unconditionally
+		wind = {k: ('CCW' if g['_wbArea'](v['pts']) > 0 else 'CW') for k, v in P.items()}
+		check('stored windings genuinely differ', len(set(wind.values())), 2)
+		for kind in sorted(P):
+			check('%-8s oriented CCW for the sweep' % kind,
+				  g['_wbArea'](g['_wbCCW'](P[kind]['pts'])) > 0, True)
+		sq = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+		check('a CCW loop is left alone', g['_wbCCW'](sq), sq)
+		check('a CW loop is reversed', g['_wbCCW'](list(reversed(sq))), sq)
+		check('_wbCCW never changes the point set',
+			  sorted(g['_wbCCW'](P['channel']['pts'])), sorted(P['channel']['pts']))
+
+		#the overflow bar is rounded at both ends and exactly symmetric
+		ov = P['overflow']['pts']
+		mirror = set((round(-12.72 - x, 4), round(y, 4)) for x, y in ov)
+		check('overflow is symmetric about x = -6.36',
+			  sorted(mirror) == sorted((round(x, 4), round(y, 4)) for x, y in ov), True)
+
+		print('   widening keeps the measured shape')
+		for kind, w, back, unmoved in (('channel', 30.0, -23.86, 38),
+									   ('flat', 30.0, -23.86, 24),
+									   ('overflow', 30.0, -23.86, 8)):
+			wide = g['_wbCopingProfile'](kind, w)
+			xs = [x for x, _y in wide]
+			same = sum(1 for a, b in zip(wide, P[kind]['pts']) if a == b)
+			check('%-8s 30cm -> back edge %g' % (kind, back), round(min(xs), 4), back)
+			check('%-8s 30cm -> width 30' % kind, round(max(xs) - min(xs), 4), 30.0)
+			check('%-8s 30cm -> %d points untouched' % (kind, unmoved), same, unmoved)
+			check('%-8s 30cm -> nose stays at 6.14' % kind, round(max(xs), 4), 6.14)
+
+		print('   building each one')
+		for kind, npt, ribs in (('flat', 27, True), ('overflow', 16, False), ('channel', 42, False)):
+			mc.calls = []
+			made = g['wbCoping'](kind)
+			check('%-8s builds' % kind, made[0].startswith('coping_%s_25x50_' % kind), True)
+			check('%-8s %d point facet' % (kind, npt),
+				  len(mc.find('polyCreateFacet')[0][2]['p']), npt)
+			check('%-8s ribs %s by default' % (kind, ribs), bool(mc.find('polyCube')), ribs)
+		mc.calls = []
+		made = g['wbCoping']('channel', width=30.0)
+		check('channel 30x50 name', made, ['coping_channel_30x50_01_geo'])
+		check('   its facet is 30cm wide',
+			  round(max(p[0] for p in mc.find('polyCreateFacet')[0][2]['p'])
+					- min(p[0] for p in mc.find('polyCreateFacet')[0][2]['p']), 4), 30.0)
+
+		#two noses -> two relax calls, one per end
+		mc.calls = []
+		g['wbCoping']('overflow')
+		check('overflow relaxes both ends',
+			  len([c for c in mc.find('polyEditUV') if c[2].get('scaleU') == 2.0]), 2)
+		mc.calls = []
+		g['wbCoping']('channel')
+		check('channel relaxes one end',
+			  len([c for c in mc.find('polyEditUV') if c[2].get('scaleU') == 2.0]), 1)
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
