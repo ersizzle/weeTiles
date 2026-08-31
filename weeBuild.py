@@ -78,8 +78,8 @@ WB_RIB_LIMIT = 3.18    #ribs stop here, short of the nose
 WB_COPING_BEVEL = 0.03
 #a top projection squashes the bullnose (2.18x) and the front face (4.99x), because
 #from above they are nearly edge on.  this widens just those UVs in U, never in V, so
-#the nose reads closer to its real size.  1.0 = leave it alone (a true top projection),
-#2.18 makes the bullnose exactly 1:1, 3.24 fully unrolls the nose.
+#the nose gets a bigger share of the square.  1.0 = leave it alone (a plain top
+#projection), 2.18 gives the bullnose the share it would have if it were laid flat.
 WB_COPING_RELAX = 2.0
 
 #model sections: (settings key, panel label).  drop model files into a section's
@@ -330,12 +330,11 @@ def _wbRelaxUV(node, nose_x, factor):
 	pivot = lo if abs(lo - centre) < abs(hi - centre) else hi
 	mc.polyEditUV(sel, pivotU=pivot, pivotV=0.0, scaleU=factor, scaleV=1.0)
 	return sel
-def _wbFitUV(node, du, dv):
-	#a planar projection fits the shell to a unit square, so anything that is not
-	#square comes out stretched - a 25 x 50 coping gets squashed 2:1.  rescale the
-	#shell to real du : dv proportions and drop it at the origin of 0-1 space.
-	if du <= 0 or dv <= 0:
-		return
+def _wbFitUV(node):
+	#stretch the shell to fill 0-1 in BOTH directions.  the textures are authored to
+	#fill the square, so the shell has to fill it too - keeping real world width to
+	#length proportions would leave part of the square unused and the texture would
+	#not line up.  run this last, so whatever _wbRelaxUV did is normalised with it.
 	uvs = mc.polyListComponentConversion(node, tuv=True)
 	bb = mc.polyEvaluate(node, boundingBox2d=True)
 	u0, u1 = bb[0][0], bb[0][1]
@@ -343,9 +342,7 @@ def _wbFitUV(node, du, dv):
 	if u1 - u0 <= 0 or v1 - v0 <= 0:
 		mc.warning('weeBuild: %s has no UV area to fit.' % node)
 		return
-	m = float(max(du, dv))
-	mc.polyEditUV(uvs, pivotU=u0, pivotV=v0,
-				  scaleU=(du / m) / (u1 - u0), scaleV=(dv / m) / (v1 - v0))
+	mc.polyEditUV(uvs, pivotU=u0, pivotV=v0, scaleU=1.0 / (u1 - u0), scaleV=1.0 / (v1 - v0))
 	mc.polyEditUV(uvs, relative=True, uValue=-u0, vValue=-v0)
 def _wbBuildCoping(profile, length, name, offset_x, ribs=True, bevel=WB_COPING_BEVEL,
 				   relax=WB_COPING_RELAX):
@@ -395,13 +392,14 @@ def _wbBuildCoping(profile, length, name, offset_x, ribs=True, bevel=WB_COPING_B
 	#so a straight planar-Y projection sends the texture down the coping
 	mc.polyProjection(tf, type='Planar', md='y')
 	mc.delete(body, constructionHistory=True)
-	#projected from the top, so the shell spans the width in U and the length in V
-	_wbFitUV(body, max(x for x, _y in profile) - min(x for x, _y in profile), length)
 	try:
+		#relax first and fit second, so the nose keeps the extra share of U it was
+		#given once the shell is stretched out to fill the square
 		_wbRelaxUV(body, _wbNoseX(profile), relax)
 	except Exception as e:
 		#never lose finished geometry over a UV tweak
 		mc.warning('weeBuild: could not relax the nose UVs on %s - %s' % (name, e))
+	_wbFitUV(body)
 	bb = mc.xform(body, q=True, ws=True, bb=True)
 	mc.move(offset_x - (bb[0] + bb[3]) / 2.0, 0, -(bb[2] + bb[5]) / 2.0, body, relative=True)
 	_wbBottomPivot(body)

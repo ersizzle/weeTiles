@@ -225,7 +225,7 @@ with the eight underside ribs merged in.
 | Width | 25 | Across the coping, in cm (minimum 20) |
 | Length | 50 | Along the coping, in cm |
 | Bevel | 0.03 | Chamfer on both end cap perimeters, as a *fraction* of the shortest adjacent edge. `0` turns it off |
-| Relax | 2 | Widens the bullnose and front face UVs in U so they are not squashed by the top projection. `1` turns it off |
+| Relax | 2 | Gives the bullnose and front face a bigger share of the UV square, in U only. `1` turns it off |
 | underside ribs | on | Merge the ribbed underside in, as the source model has it |
 
 Changing **Width** stretches only the flat back run. The bullnose (an exact R0.965
@@ -234,21 +234,14 @@ at — that is the point of rebuilding it rather than importing a fixed mesh. Th
 is not flat: it rises about 0.66cm from the back edge to the nose, as the real
 product does.
 
-UVs are projected planar **from the top** — the way the real tiles are painted — then
-rescaled to the coping's real width:length proportions, so a 25 x 50 lands as a
-0.5 x 1.0 shell at the origin of 0-1 space rather than being stretched 2:1.
+UVs are projected planar **from the top** — the way the real tiles are painted — and
+the shell is then stretched to fill **the whole 0-1 square**, so the texture registers.
 
 Projecting from above compresses anything steep. The top surface and the lip underside
-come out 1:1, but the bullnose lands at 2.18x and the front face at 4.99x. **Relax**
-widens just those two in U (never in V), pivoting on the inner edge so the top surface
-never moves:
-
-| Relax | Effect |
-| --- | --- |
-| 1.0 | Off — a plain top projection |
-| 2.0 | Default. Bullnose 1.09x, front face 2.50x |
-| 2.18 | Bullnose exactly 1:1 |
-| 3.24 | Nose fully unrolled |
+come out true, but the bullnose is squashed 2.18x and the front face 4.99x. **Relax**
+gives just those two a bigger share of the square, widening them in U only (never in V)
+and pivoting on the inner edge so the top surface does not shift. `1` turns it off,
+`2` is the default, `2.18` gives the bullnose the share it would have laid flat.
 
 Side and back faces are left as the projection puts them — they are never seen.
 

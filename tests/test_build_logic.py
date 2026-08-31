@@ -37,6 +37,7 @@ class StubMC(object):
 		#which is how we check the relax pivot does not depend on Maya's U direction.
 		self.uvCount = 20
 		self.uvFlip = False
+		self.uvBB = ((0.0, 1.0), (0.0, 1.0))   #what polyEvaluate(bb2) reports
 		self.assemblies = []      #what ls(assemblies=True) returns
 		self.meshRoots = set()    #which of those carry a mesh
 		self.newOnImport = []     #what the next file(i=True) creates
@@ -134,7 +135,7 @@ class StubMC(object):
 	def polyProjection(self, *a, **kw):
 		self._rec('polyProjection', *a, **kw)
 	def polyEvaluate(self, *a, **kw):
-		return ((0.0, 1.0), (0.0, 1.0))
+		return self.uvBB
 	def polyEditUV(self, *a, **kw):
 		if kw.get('q'):
 			c = a[0] if isinstance(a[0], str) else a[0][0]
@@ -501,11 +502,10 @@ def main():
 		check('planar Y projection', mc.find('polyProjection')[0][2]['md'], 'y')
 		check('no UV rotation on a coping',
 			  [c for c in mc.find('polyEditUV') if 'angle' in c[2]], [])
-		#the projection fits the shell to a unit square; a 25 x 50 coping must come
-		#back out at 0.5 x 1.0 or the texture is stretched 2:1 across the width
-		fit = mc.find('polyEditUV')
-		check('shell rescaled to real proportions',
-			  (fit[0][2]['scaleU'], fit[0][2]['scaleV']), (0.5, 1.0))
+		#the fit is the last thing done to the UVs - relax runs before it
+		fit = mc.find('polyEditUV')[-2:]
+		check('shell stretched to fill 0-1',
+			  (fit[0][2]['scaleU'], fit[0][2]['scaleV']), (1.0, 1.0))
 		check('scaled about the shell corner',
 			  (fit[0][2]['pivotU'], fit[0][2]['pivotV']), (0.0, 0.0))
 		check('then moved to the 0-1 origin', fit[1][2]['relative'], True)
@@ -571,17 +571,29 @@ def main():
 			except ValueError:
 				check('bevel %g rejected' % bad, True, True)
 
-		print('\n[15] UV proportions')
-		#du:dv is width:length, so the shell keeps the object's real aspect
-		for w, l, want in ((25.0, 50.0, (0.5, 1.0)), (50.0, 25.0, (1.0, 0.5)),
-						   (30.0, 30.0, (1.0, 1.0)), (25.0, 100.0, (0.25, 1.0))):
+		print('\n[15] the shell fills 0-1')
+		#whatever the projection produced, the shell must come out spanning exactly
+		#0-1 in both directions - the textures are authored to fill the square, so a
+		#shell that only reaches 0.35 leaves the texture misregistered
+		for bb, su, sv in ((((0.0, 0.5), (0.0, 1.0)), 2.0, 1.0),
+						   (((0.2, 0.7), (0.0, 2.0)), 2.0, 0.5),
+						   (((-0.4, 0.1), (0.5, 0.75)), 2.0, 4.0),
+						   (((0.0, 1.0), (0.0, 1.0)), 1.0, 1.0)):
+			mc.uvBB = bb
 			mc.calls = []
-			g['wbCoping'](width=w, length=l, ribs=False)
-			e = mc.find('polyEditUV')[0][2]
-			check('%gx%g -> shell %s' % (w, l, want), (e['scaleU'], e['scaleV']), want)
+			g['wbCoping'](ribs=False, relax=1.0)
+			e = mc.find('polyEditUV')
+			check('bb u %s -> scale (%g, %g)' % (bb[0], su, sv),
+				  (round(e[-2][2]['scaleU'], 9), round(e[-2][2]['scaleV'], 9)), (su, sv))
+			check('   then shifted to the origin',
+				  (e[-1][2]['uValue'], e[-1][2]['vValue']), (-bb[0][0], -bb[1][0]))
+		mc.uvBB = ((0.3, 0.3), (0.0, 1.0))
 		mc.calls = []
-		g['_wbFitUV']('someNode', 0, 50.0)
-		check('zero extent is a no-op', mc.find('polyEditUV'), [])
+		mc.warnings = []
+		g['_wbFitUV']('flatNode')
+		check('a degenerate shell warns, not divides by zero', len(mc.warnings), 1)
+		check('and touches no UVs', mc.find('polyEditUV'), [])
+		mc.uvBB = ((0.0, 1.0), (0.0, 1.0))
 
 		print('\n[16] relaxing the nose UVs')
 		prof = g['WB_COPING_PROFILES']['flat']
@@ -614,8 +626,8 @@ def main():
 
 		mc.calls = []
 		g['wbCoping'](ribs=False, relax=1.0)
-		check('relax 1 -> a plain top projection',
-			  [c for c in mc.find('polyEditUV') if c[2].get('scaleU') not in (0.5, None)], [])
+		#with relax off the only UV work left is the fit: one scale, one move
+		check('relax 1 -> nothing but the fit', len(mc.find('polyEditUV')), 2)
 
 		for bad in (0.5, 0.0, 5.5):
 			try:

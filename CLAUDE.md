@@ -170,10 +170,12 @@ Regions in file order, marked with banner comments:
      model does, so it is deliberate.
    - UVs: `polyProjection` planar from **+Y (top)** — this is deliberate and matches how
      the real tiles are laser-painted from above, so **do not replace it with an unroll**.
-     Then `_wbFitUV` rescales the shell to the object's real width:length (a planar
-     projection fits to a unit square on its own, squashing a 25×50 coping 2:1), and
-     `_wbRelaxUV` widens the nose. **No** 90° rotation (unlike the tiles) since the
-     length already runs along Z.
+     Then `_wbRelaxUV` widens the nose and `_wbFitUV` stretches the shell to fill
+     **0-1 in both directions**. Order matters — relax first, fit last — so the nose
+     keeps the extra share of U it was given. **Do not** make the fit preserve real
+     width:length proportions: the textures are authored to fill the square, so a shell
+     that only reaches 0.35 leaves them misregistered. **No** 90° rotation (unlike the
+     tiles) since the length already runs along Z.
    - A top projection maps each face by its X span, so it compresses whatever is steep:
      top surface and lip underside 1.00×, underside 1.05×, grip undercut 1.12×,
      **bullnose 2.18×**, **front face 4.99×**, back face collapses (it is vertical).
@@ -182,8 +184,9 @@ Regions in file order, marked with banner comments:
      high point, 4.7927) by `WB_COPING_RELAX` in **U only**. The pivot is whichever end
      of the nose block faces the rest of the shell, so the top surface never moves and
      the shell only grows outward — that also makes it independent of which way round
-     Maya laid U out, which the tests check both ways. 1.0 = plain top projection,
-     2.18 = bullnose exactly 1:1, 3.24 = nose fully unrolled.
+     Maya laid U out, which the tests check both ways. Because `_wbFitUV` normalises
+     afterwards, the factor sets the nose's **share** of the square, not an absolute
+     size. 1.0 = plain top projection, 2.18 = the share it would get laid flat.
    - `_wbCapEdges` picks the two end cap perimeters (both of an edge's verts at the same
      Z) and `polyBevel3` chamfers them: **fraction** `WB_COPING_BEVEL` = 0.03, 1 segment,
      chamfer on — the settings the user dialled in by hand. It runs **before** the ribs
