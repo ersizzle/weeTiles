@@ -534,21 +534,36 @@ def wbCoping(kind='flat', width=None, length=None, count=1, ribs=None,
 		  % (count, kind, width, length, ', '.join(made)))
 	return made
 def _wbCopingBtn(kind, width, length):
-	#a preset button: the panel fields win, the preset supplies the fallback
-	return wbCoping(kind, width=_wbNum('cwidth', width), length=_wbNum('clength', length),
+	#a preset button builds the size written on it - the size comes straight from the
+	#preset, never through _wbNum, or a leftover panel field would silently override it
+	#and every preset would build whatever the Width box happened to say.  the fields
+	#carry the modifiers only, which is how the tile buttons work too.
+	return wbCoping(kind, width=width, length=length,
 					count=_wbNum('ccount', 1, integer=True),
 					ribs=_wbFlag('cribs', True),
 					bevel=_wbNum('cbevel', WB_COPING_BEVEL),
 					relax=_wbNum('crelax', WB_COPING_RELAX))
 def wbCopingCustom():
 	#any other width x length, typed in
-	r = mc.promptDialog(title='Custom coping', message='Width x Length in cm (e.g. 25x50):', text='25x50', button=['OK', 'Cancel'], defaultButton='OK', cancelButton='Cancel', dismissString='Cancel')
+	r = mc.promptDialog(title='Custom coping',
+					    message='Profile and size, e.g. channel 30x50:',
+					    text='%s %gx%g' % (WB_COPINGS[0][1], WB_COPING_W, WB_COPING_L),
+					    button=['OK', 'Cancel'], defaultButton='OK', cancelButton='Cancel',
+					    dismissString='Cancel')
 	if r != 'OK':
 		return []
-	nums = re.findall(r'[\d.]+', mc.promptDialog(q=True, text=True) or '')
+	txt = (mc.promptDialog(q=True, text=True) or '').strip()
+	kind = WB_COPINGS[0][1]
+	head = txt.split()[0].lower() if txt.split() else ''
+	if head and not head[0].isdigit():
+		if head not in WB_COPING_PROFILES:
+			raise ValueError('unknown profile "%s" - have %s.'
+							 % (head, ', '.join(sorted(WB_COPING_PROFILES))))
+		kind = head
+	nums = re.findall(r'[\d.]+', txt)
 	if len(nums) < 2:
-		raise ValueError('enter two numbers, e.g. 25x50.')
-	return _wbCopingBtn(WB_COPINGS[0][1], float(nums[0]), float(nums[1]))
+		raise ValueError('enter a width and a length, e.g. channel 30x50.')
+	return _wbCopingBtn(kind, float(nums[0]), float(nums[1]))
 
 ##############################################################################
 #  models - grates, copings, and whatever gets added to WB_SECTIONS later
@@ -729,8 +744,10 @@ def wbUI():
 	_wbRow(f, [('Custom size...', wbTileCustom, 'amber', 'build any other short x long size')])
 
 	f = mc.frameLayout(parent=main, label='  Copings', collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
-	_wbNums(f, [('ccount', 'Count', '1'), ('cwidth', 'Width', '%g' % WB_COPING_W), ('clength', 'Length', '%g' % WB_COPING_L)])
-	_wbNums(f, [('cbevel', 'Bevel', '%g' % WB_COPING_BEVEL), ('crelax', 'Relax', '%g' % WB_COPING_RELAX)])
+	#no Width / Length fields here: each button names its own size and the Custom
+	#dialog asks for one, so a field could only disagree with the button just pressed
+	_wbNums(f, [('ccount', 'Count', '1'), ('cbevel', 'Bevel', '%g' % WB_COPING_BEVEL),
+				('crelax', 'Relax', '%g' % WB_COPING_RELAX)])
 	_wbCheck(f, 'cribs', 'underside ribs', True,
 			 'only the flat profile has ribs; unticking drops them, ticking cannot add them')
 	for i in range(0, len(WB_COPINGS), 2):

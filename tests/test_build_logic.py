@@ -38,6 +38,8 @@ class StubMC(object):
 		self.uvCount = 20
 		self.uvFlip = False
 		self.uvBB = ((0.0, 1.0), (0.0, 1.0))   #what polyEvaluate(bb2) reports
+		self.promptButton = ''                 #what promptDialog returns
+		self.promptText = ''                   #and what it says when queried
 		self.hotkeySets = set()
 		self.hotkeySetCur = 'Maya_Default'     #the read only one Maya starts on
 		self.hotkeyTaken = ''                  #what hotkey(q=True, name=True) answers
@@ -178,7 +180,10 @@ class StubMC(object):
 
 	#-- dialogs / UI (no-ops, they only need to not explode) -----------------
 	def promptDialog(self, *a, **kw):
-		return ''
+		if kw.get('q'):
+			return self.promptText
+		self._rec('promptDialog', *a, **kw)
+		return self.promptButton
 	def fileDialog2(self, *a, **kw):
 		return None
 	def textField(self, *a, **kw):
@@ -816,6 +821,51 @@ def main():
 		check('and the profile flags still say who has them',
 			  {k: v['ribs'] for k, v in sorted(g['WB_COPING_PROFILES'].items())},
 			  {'channel': False, 'flat': True, 'overflow': False})
+
+		print('\n[20] a preset button builds the size on its label')
+		#the Width / Length fields used to be read through _wbNum, so a leftover 25 in
+		#the box beat the preset and "Channel 30 x 50" quietly built a 25.  the fields
+		#are gone; the size now comes straight off the preset, as it does for tiles.
+		g['wbUI']()
+		for lbl, kind, w, l in g['WB_COPINGS']:
+			mc.calls = []
+			made = g['_wbCopingBtn'](kind, w, l)
+			xs = [q[0] for q in mc.find('polyCreateFacet')[0][2]['p']]
+			check('%-18s -> %g wide' % (lbl, w), round(max(xs) - min(xs), 4), w)
+			check('%-18s -> %g long' % (lbl, l),
+				  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], l)
+			check('%-18s -> named for it' % lbl,
+				  ('%s_%s' % (kind, g['_wbSafe']('%gx%g' % (w, l), fragment=True))) in made[0], True)
+		check('the two Channel presets differ', g['WB_COPINGS'][2][2] != g['WB_COPINGS'][3][2], True)
+		check('no Width / Length fields left to disagree',
+			  [k for k in g['_wbFields'] if k in ('cwidth', 'clength')], [])
+
+		#the modifier fields must still reach the build
+		mc.fields[g['_wbFields']['ccount']] = '3'
+		mc.calls = []
+		check('Count field still applies', len(g['_wbCopingBtn']('channel', 30.0, 50.0)), 3)
+		mc.fields[g['_wbFields']['ccount']] = '1'
+
+		print('   the Custom dialog picks a profile too')
+		mc.promptButton = 'OK'
+		for txt, kind, w, l in (('channel 30x50', 'channel', 30.0, 50.0),
+								('overflow 25x50', 'overflow', 25.0, 50.0),
+								('40x60', 'flat', 40.0, 60.0)):
+			mc.promptText = txt
+			mc.calls = []
+			made = g['wbCopingCustom']()
+			xs = [q[0] for q in mc.find('polyCreateFacet')[0][2]['p']]
+			check('"%s" -> %s %g wide' % (txt, kind, w), (kind in made[0], round(max(xs) - min(xs), 4)),
+				  (True, w))
+		for bad, why in (('bogus 30x50', 'unknown profile'), ('channel 30', 'only one number')):
+			mc.promptText = bad
+			try:
+				g['wbCopingCustom']()
+				check('"%s" rejected (%s)' % (bad, why), False, True)
+			except ValueError:
+				check('"%s" rejected (%s)' % (bad, why), True, True)
+		mc.promptButton = ''
+		mc.promptText = ''
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)

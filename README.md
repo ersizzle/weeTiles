@@ -234,16 +234,18 @@ are the shapes the product actually has — not an approximation.
 | Field | Default | What it does |
 | --- | --- | --- |
 | Count | 1 | How many to build, in a row along X |
-| Width | per profile | Across the coping, in cm |
-| Length | per profile | Along the coping, in cm |
 | Bevel | 0.03 | Chamfer on both end cap perimeters, as a *fraction* of the shortest adjacent edge. `0` turns it off |
 | Relax | 2 | Gives the squashed nose(s) a bigger share of the UV square, in U only. `1` turns it off |
 | underside ribs | on | Only `flat` has ribs. Unticking drops them; ticking cannot add them to a profile that has none |
 
-Changing **Width** stretches only the flat back run. Every nose, lip, channel and
-undercut keeps its measured shape — which is the point of rebuilding these rather than
-importing a fixed mesh. So `Channel 30 x 50` is the 25cm profile with 5cm more flat
-behind it, exactly as the real product varies.
+Each button builds the size written on it. For anything else use **Custom size…**,
+which takes a profile and a size — `channel 30x50`, or just `30x50` for the first
+profile.
+
+A wider coping stretches only the flat back run. Every nose, lip, channel and undercut
+keeps its measured shape — which is the point of rebuilding these rather than importing
+a fixed mesh. So `Channel 30 x 50` is the 25cm profile with 5cm more flat behind it,
+exactly as the real product varies.
 
 Named `coping_<profile>_<size>_<nn>_geo`, with the same `p`-for-a-dot rule as the tiles —
 `coping_channel_30x50_01_geo`.

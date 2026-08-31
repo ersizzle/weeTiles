@@ -203,6 +203,18 @@ Regions in file order, marked with banner comments:
      got the flat coping's ribs. The tests missed it because they all called `wbCoping`
      directly, where `ribs=None` reaches the profile flag. **Check `[19]` exercises the
      button path** — if you touch this, keep that coverage.
+   - **A preset button's size comes straight from the preset**, never through
+     `_wbNum`. Same trap, second instance: the Copings section had Width / Length
+     fields, `_wbCopingBtn` read them through `_wbNum`, and with the panel open the
+     leftover `25` beat the preset — so "Channel 30 x 50" built a 25 and named itself
+     `coping_channel_25x50_01_geo`. Those two fields are **gone**; each button names
+     its own size and `wbCopingCustom` asks for one. Do not add them back. Panel fields
+     carry modifiers only (Count / Bevel / Relax / ribs), which is how `_wbTileBtn`
+     has always worked. Check `[20]` drives every preset button and fails if a size
+     goes back through `_wbNum`.
+   - `wbCopingCustom` takes `profile WxL` (`channel 30x50`); a bare `30x50` uses the
+     first profile in `WB_COPINGS`. It used to hardcode that first profile, which was
+     fine with one profile and wrong with three.
    - UVs: `polyProjection` planar from **+Y (top)** — deliberate, and it matches how the
      real tiles are laser-painted from above, so **do not replace it with an unroll**.
      Then `_wbRelaxUV` widens the noses and `_wbFitUV` stretches the shell to fill **0-1
