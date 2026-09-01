@@ -219,7 +219,13 @@ WB_MONO_SLOT_L = 12.0    #slot length, down the slab
 WB_MONO_SLOT_PITCH = 15.0#Z pitch within a column; the stagger is half of this
 WB_MONO_MARGIN = 4.0     #solid margin between the outermost slot and the slab edge
 WB_MONO_COL_MAX = 10.5   #the furthest apart two slot columns may sit
-WB_MONO_BEVEL = 0.06
+WB_MONO_BEVEL = 0.06     #the frame's edge rounding
+#the slab's twelve outer edges are ROUNDED, not chamfered: all four fillets measure
+#R0.116 over four segments, in plan as well as in section.  a 1-segment chamfer at
+#half that size is what made it read as a plain box.  the slot walls are sharp, so
+#this is applied before the slots are cut.
+WB_MONO_ROUND = 0.116
+WB_MONO_ROUND_SEG = 4
 
 #the slat cross-section, sliced out of the source model.  it is NOT a box: the top is a
 #shallow camber, the sides draught inward, the top corners are arcs and the underside
@@ -764,14 +770,22 @@ def _wbMonoSlots(width, length):
 			out.append((c, z))
 	return out
 def _wbBuildMono(width, length, name, offset_x, bevel=WB_MONO_BEVEL):
-	#a monoblock grate: a slotted slab on the same kind of frame as the hidden one.
+	#a monoblock grate: a slotted slab on the same frame as the hidden one.
 	width, length, bevel = float(width), float(length), float(bevel)
-	#the slab is ONE box with the slots cut out of it.  building it as a jigsaw of
-	#solid pieces instead leaves coincident internal faces wherever two pieces meet,
-	#which z-fights and shades badly - the source is a single watertight shell, every
-	#edge used exactly twice, so it was cut and this has to be too.
+	#the slab is ONE box with the slots cut out of it.  building it as a jigsaw of solid
+	#pieces instead leaves coincident internal faces wherever two pieces meet, which
+	#z-fights and shades badly - the source is a single watertight shell, every edge used
+	#exactly twice, so it was cut and this has to be too.
 	slab = mc.polyCube(w=width, h=WB_MONO_H, d=length, name=name + '_slab')[0]
 	mc.move(0.0, WB_MONO_Y + WB_MONO_H / 2.0, 0.0, slab)
+	#round the slab's twelve outer edges BEFORE cutting.  order matters: the model has
+	#R0.116 rounds right round the slab but dead sharp slot walls, and bevelling after the
+	#boolean would round the slots too.  this is also what stops it reading as a plain box.
+	if WB_MONO_ROUND > 0:
+		mc.polyBevel3(mc.ls(slab + '.e[*]', flatten=True), offset=WB_MONO_ROUND,
+					  offsetAsFraction=False, segments=int(WB_MONO_ROUND_SEG), depth=1,
+					  worldSpace=True, autoFit=True, mergeVertices=True, smoothingAngle=30)
+		mc.delete(slab, constructionHistory=True)
 	cutters = []
 	for i, (cx, cz) in enumerate(_wbMonoSlots(width, length)):
 		#taller than the slab so the cut goes clean through both faces
@@ -784,7 +798,8 @@ def _wbBuildMono(width, length, name, offset_x, bevel=WB_MONO_BEVEL):
 		if len(cutters) > 1:
 			cut = mc.polyUnite(cutters, constructionHistory=False, name=name + '_cut')[0]
 		slab = _wbBool(slab, cut, 2, name + '_slab')
-	parts = [slab]
+	#the frame, which keeps its own smaller rounding
+	frame = []
 	bw = width + 2.0 * WB_MONOH_OVER_X
 	bl = length + 2.0 * WB_MONOH_OVER_Z
 	rx = bw / 2.0 - WB_MONOH_RAIL_IN - WB_MONOH_RAIL_W / 2.0
@@ -792,14 +807,14 @@ def _wbBuildMono(width, length, name, offset_x, bevel=WB_MONO_BEVEL):
 		r = mc.polyCube(w=WB_MONOH_RAIL_W, h=WB_MONOH_BASE_H, d=bl,
 						name='%s_rail%02d' % (name, i + 1))[0]
 		mc.move(x, WB_MONOH_BASE_H / 2.0, 0.0, r)
-		parts.append(r)
+		frame.append(r)
 	zs = _wbMonoHRibs(length)
 	for i, z in enumerate(zs):
 		if i in (0, len(zs) - 1):
 			b = mc.polyCube(w=bw, h=WB_MONOH_BASE_H, d=WB_MONOH_RIB,
 							name='%s_rib%02d' % (name, i + 1))[0]
 			mc.move(0.0, WB_MONOH_BASE_H / 2.0, z, b)
-			parts.append(b)
+			frame.append(b)
 			continue
 		hw = (bw - WB_MONOH_RIB_GAP) / 2.0
 		if hw <= 0:
@@ -808,13 +823,14 @@ def _wbBuildMono(width, length, name, offset_x, bevel=WB_MONO_BEVEL):
 			b = mc.polyCube(w=hw, h=WB_MONOH_BASE_H, d=WB_MONOH_RIB,
 							name='%s_rib%02d%s' % (name, i + 1, 'lr'[s > 0]))[0]
 			mc.move(s * (WB_MONOH_RIB_GAP + hw) / 2.0, WB_MONOH_BASE_H / 2.0, z, b)
-			parts.append(b)
+			frame.append(b)
 	if bevel > 0:
-		for q in parts:
+		for q in frame:
 			mc.polyBevel3(mc.ls(q + '.e[*]', flatten=True), offset=bevel, offsetAsFraction=False,
 						  segments=1, depth=1, worldSpace=True, autoFit=True,
 						  mergeVertices=True, smoothingAngle=30)
 			mc.delete(q, constructionHistory=True)
+	parts = [slab] + frame
 	out = parts[0]
 	if len(parts) > 1:
 		out = mc.polyUnite(parts, constructionHistory=False, name=name)[0]

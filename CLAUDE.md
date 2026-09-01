@@ -313,8 +313,16 @@ Regions in file order, marked with banner comments:
      are made 3× the slab height so the cut passes cleanly through both faces, and are
      united into one before the single difference.
    - The slot walls are **vertical and unchamfered** — sliced through a slot, both
-     walls run straight from Y 0.8 to 2.4 exactly 1.500 apart. A plain box cutter is
-     therefore right; don't add a draft or a fillet to it.
+     walls run straight from Y 0.8 to 2.4 exactly 1.500 apart, and every vertex at the
+     slot mouth sits exactly on Y 2.4. A plain box cutter is right; no draft, no fillet.
+   - **But the slab's twelve outer edges are ROUNDED**, `WB_MONO_ROUND` = **R0.116**
+     over `WB_MONO_ROUND_SEG` = 4 segments — all four fillets fit that radius, in plan
+     as well as in section. A first pass used a 1-segment 0.06 chamfer and the user
+     said it still looked square; that is why. **Order matters:** the slab is rounded
+     *before* the slots are cut, or the boolean's slot edges get rounded too.
+   - The two models differ here and it is not a measuring error: the **hidden** slab is
+     genuinely sharp (a single vertex at each corner, section reduces to four points),
+     the **slotted** one is rounded. Don't unify them.
    - `_wbMonoSlotCols` keeps the column count **odd**. That is not cosmetic: every other
      column is staggered, so an even count leaves the two middle columns matching and the
      pattern breaks.

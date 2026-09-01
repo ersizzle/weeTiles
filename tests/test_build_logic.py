@@ -1196,6 +1196,41 @@ def main():
 			except ValueError:
 				check('%s rejected' % why, True, True)
 
+		print('\n[26] the slab is rounded, and rounded before it is cut')
+		#"still like square" was a 1-segment 0.06 chamfer standing in for an R0.116
+		#four-segment round.  all four fillets in the model measure R0.116, in plan as
+		#well as in section, while the slot walls are dead sharp.
+		check('round radius', g['WB_MONO_ROUND'], 0.116)
+		check('   and it is a round, not a chamfer', g['WB_MONO_ROUND_SEG'] >= 4, True)
+		check('   bigger than the frame chamfer it replaced',
+			  g['WB_MONO_ROUND'] > g['WB_MONO_BEVEL'], True)
+		mc.calls = []
+		g['wbMono'](25.0, 65.0)
+		seq = [c[0] for c in mc.calls if c[0] in ('polyCube', 'polyBevel3', 'polyCBoolOp')]
+		bevs = mc.find('polyBevel3')
+		slabbev = [c for c in bevs if c[2]['offset'] == g['WB_MONO_ROUND']]
+		check('the slab is rounded once', len(slabbev), 1)
+		check('   with %d segments' % g['WB_MONO_ROUND_SEG'],
+			  slabbev[0][2]['segments'], g['WB_MONO_ROUND_SEG'])
+		check('   at the measured radius', slabbev[0][2]['offset'], 0.116)
+		#order is the whole point: round first, then cut, or the slots get rounded too
+		check('rounded BEFORE the boolean',
+			  seq.index('polyBevel3') < seq.index('polyCBoolOp'), True)
+		check('   and nothing is bevelled after it',
+			  max(i for i, c in enumerate(mc.calls) if c[0] == 'polyCBoolOp')
+			  > max(i for i, c in enumerate(mc.calls)
+					if c[0] == 'polyBevel3' and c[2]['offset'] == g['WB_MONO_ROUND']), True)
+		#the frame keeps its own smaller chamfer
+		framebev = [c for c in bevs if c[2]['offset'] == g['WB_MONO_BEVEL']]
+		check('the frame keeps its own chamfer', len(framebev), 10)
+		check('   which is 1 segment, not a round', framebev[0][2]['segments'], 1)
+		mc.calls = []
+		g['wbMono'](25.0, 65.0, bevel=0)
+		check('bevel 0 leaves the frame sharp',
+			  [c for c in mc.find('polyBevel3') if c[2]['offset'] == g['WB_MONO_BEVEL']], [])
+		check('   but the slab is still rounded',
+			  len([c for c in mc.find('polyBevel3') if c[2]['offset'] == g['WB_MONO_ROUND']]), 1)
+
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
 
