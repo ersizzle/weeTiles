@@ -300,21 +300,19 @@ sits midway between them, chosen by eye rather than measured.
 
 ## Monoblock grates
 
-**Mono 25 x 65** and **Mono 30 x 65**, in the same Grates section, with their own MonoBev
-field.
+Two kinds, both in the Grates section.
 
-This one has no slots, by design — the slab is solid and the water runs *around* it. That
-is why the frame underneath is bigger than the slab: it stands 1cm proud at each side and
-0.5 at each end, and the gap that opens up is the drain.
+**Mono 25 x 65** and **Mono 30 x 65** are the slotted ones: a slab with **11 slots of
+1.5 x 12**, in three columns with the middle column staggered half a pitch against the
+outer two, and a 4cm solid margin all round. Named `grate_mono_<size>_<nn>_geo`.
 
-| | |
-| --- | --- |
-| Slab | the size on the button, 1.6 thick, plain sharp-edged box |
-| Frame | 2cm wider, 1cm longer, 1.0 tall |
-| Frame structure | two 2cm rails down the length, plus cross ribs every 16cm |
-| Ribs | the end pair solid; the ones between split by a 5cm gap for the water |
+**Hidden 25 x 65** and **Hidden 30 x 65** have no slots at all, by design — the slab is
+solid and the water runs *around* it, which is why the frame underneath stands 1cm proud
+at each side. Named `grate_monohidden_<size>_<nn>_geo`.
 
-The button size is the **slab**. Named `grate_mono_<size>_<nn>_geo`.
+Both stand on the same frame: two rails down the length plus cross ribs every 16cm, the
+end pair solid and the ones between split by a 5cm gap for the water. **SlotBev** and
+**HiddenBevel** set the edge rounding on each.
 
 ## Grate and Coping models
 

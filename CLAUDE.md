@@ -294,25 +294,32 @@ Regions in file order, marked with banner comments:
      the 30 product, so `WB_GRATE_SIZE` is (30, 50). Note the model's own hardware
      spacing is what this rule produces for **25**, so treat its width with suspicion
      rather than as evidence.
-6. **monoblock grates** — `_wbMonoRibs` is pure; `_wbBuildMono` stacks a slab on a
-   ladder frame from `polyCube`s and merges them. Presets in `WB_MONO`.
-   - **It has no slots, and that is correct.** The slab is solid — sliced at every height
-     it comes back as one loop of area exactly 1625 (25×65), and its section reduces to
-     **four points**, a plain sharp-edged box with no chamfer or camber. The water goes
-     **round** the block, down the gap the frame opens up, not through it. Don't
-     “fix” this by perforating the slab.
-   - That is why the frame is **bigger than the slab**: 27×66 against 25×65, standing
-     `WB_MONO_OVER_X` (1.0) proud each side and `WB_MONO_OVER_Z` (0.5) at each end.
-   - The frame is a ladder: two rails `WB_MONO_RAIL_W` (2.0) wide running the full length
-     with their outer face `WB_MONO_RAIL_IN` (1.35) in from the edge, plus cross ribs.
-     The **end pair are solid across; the ones between have a 5.0 gap down the middle**,
-     so each is built as two pieces. `_wbMonoRibs` gives five ribs exactly 16.0 apart at
-     65cm, matching the model.
-   - Preset sizes are the **slab**, not the frame — the model's slab is exactly 25×65, so
-     unlike the flex grate and the overflow coping there is no naming ambiguity here.
-   - Mapped by **ray-casting a grid**, not by walking boundary loops: loop-walking is
-     unreliable wherever a vertex is shared between loops, and it reported “0 holes” and
-     “1 boundary” on geometry that has plenty of both. Rasterise when the answer matters.
+6. **monoblock grates — two of them.** `tile_models/grates/` holds
+   `monoblock_grate` (**slotted**, the one with the drainage slots) and
+   `monoblock_hidden_grate` (**solid**, water goes round it). They share a footprint and
+   a frame, so keep the names straight: everything for the solid one is `WB_MONOH_*` /
+   `wbMonoH` / `grate_monohidden_*`.
+   - **Slotted** (`WB_MONO`, `wbMono`): a slab carrying **11 slots of 1.500 × 12.000** in
+     three columns, the middle one **staggered half a pitch** (15.0) against the outer
+     two — 4 slots in the outer columns, 3 in the middle. 4.0 solid margin all round.
+   - `_wbMonoSlab` returns the slab as a list of solid `(x0, x1, z0, z1)` boxes — **no
+     boolean**. The slots sit on a regular grid, so the solid part is exactly the strips
+     between the columns plus the bridges between slots within a column. Check `[25]`
+     proves it is an exact tiling: the areas sum to `W×L − slots` **and** no two boxes
+     overlap, which area alone would not catch.
+   - `_wbMonoSlotCols` keeps the column count **odd**. That is not cosmetic: every other
+     column is staggered, so an even count leaves the two middle columns matching and the
+     pattern breaks.
+   - **Solid** (`WB_MONOH`, `wbMonoH`): no slots, and that is right — sliced at every
+     height it is one loop of area exactly 1625 (25×65) and its section reduces to four
+     points. The water goes **round** it, down the gap its frame opens up, which is why
+     the frame is 27×66 against a 25×65 slab. Don't “fix” it by perforating the slab.
+   - The frame under both: two rails plus cross ribs, the end pair solid and the ones
+     between split by a 5.0 gap. The slotted model's own frame is a lighter perimeter
+     design than the solid one's ladder, but it is underneath and the ladder is shared.
+   - Both models were mapped by **ray-casting a grid**, not by walking boundary loops:
+     loop-walking is unreliable wherever a vertex is shared between loops, and it
+     reported “0 holes” on geometry that has plenty. Rasterise when the answer matters.
 7. **models** — `_wbModelFiles`, `wbImport` (ported from weeTiles' `_wtImportOne`: diff
    `mc.ls(assemblies=True)`, keep roots containing a mesh, rename `<file>_geo`, drop
    pivot), `wbSetFolder`, `wbRefresh`.

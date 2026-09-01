@@ -481,7 +481,11 @@ def main():
 		check('a button per grate preset',
 			  sum(1 for l in labels if l in [q[0] for q in g['WB_GRATES']]), len(g['WB_GRATES']))
 		check('a button per monoblock preset',
-			  sum(1 for l in labels if l in [q[0] for q in g['WB_MONO']]), len(g['WB_MONO']))
+			  sum(1 for l in labels if l in [g['_wbWrap'](q[0]) for q in g['WB_MONO']]),
+			  len(g['WB_MONO']))
+		check('a button per hidden-monoblock preset',
+			  sum(1 for l in labels if l in [g['_wbWrap'](q[0]) for q in g['WB_MONOH']]),
+			  len(g['WB_MONOH']))
 		check('ribs checkbox', [c[2].get('label') for c in mc.find('checkBox')], ['underside ribs'])
 
 		print('\n[12] coping profile maths - no Maya in here')
@@ -1067,57 +1071,116 @@ def main():
 		check('   still the same height', round(max(q[1] for q in wide), 4), 2.5158)
 
 		print('\n[24] monoblock grates - solid slab, water goes round')
-		check('two presets', [q[0] for q in g['WB_MONO']], ['Mono 25 x 65', 'Mono 30 x 65'])
+		check('two presets', [q[0] for q in g['WB_MONOH']], ['Hidden 25 x 65', 'Hidden 30 x 65'])
 		#the model's slab is 25 x 65 and its frame 27 x 66; five ribs exactly 16 apart
-		zs = g['_wbMonoRibs'](65.0)
+		zs = g['_wbMonoHRibs'](65.0)
 		check('65cm -> 5 ribs', len(zs), 5)
 		check('   at the model positions', [round(z, 2) for z in zs],
 			  [-32.0, -16.0, 0.0, 16.0, 32.0])
 		check('   pitch is exactly 16', [round(zs[i + 1] - zs[i], 6) for i in range(4)], [16.0] * 4)
 		check('ribs stay symmetric', round(zs[0] + zs[-1], 6), 0.0)
 		for L, n in ((30.0, 3), (65.0, 5), (100.0, 7)):
-			r = g['_wbMonoRibs'](L)
+			r = g['_wbMonoHRibs'](L)
 			check('%gcm -> %d ribs' % (L, n), len(r), n)
 			check('   inset from the frame end',
-				  round((L / 2.0 + g['WB_MONO_OVER_Z']) - max(r), 4), g['WB_MONO_RIB'])
+				  round((L / 2.0 + g['WB_MONOH_OVER_Z']) - max(r), 4), g['WB_MONOH_RIB'])
+
+		print('   every preset button builds the size on its label')
+		g['wbUI']()
+		for lbl, w, l in g['WB_MONOH']:
+			mc.calls = []
+			made = g['_wbMonoHBtn'](w, l)
+			cubes = mc.find('polyCube')
+			slab = [c for c in cubes if c[2]['name'].endswith('_slab')][0][2]
+			rails = [c for c in cubes if '_rail' in c[2]['name']]
+			ribs = [c for c in cubes if '_rib' in c[2]['name']]
+			bw = w + 2.0 * g['WB_MONOH_OVER_X']
+			check('%-14s slab %g x %g' % (lbl, w, l), (slab['w'], slab['d']), (w, l))
+			check('%-14s slab is %g thick' % (lbl, g['WB_MONOH_H']), slab['h'], g['WB_MONOH_H'])
+			check('%-14s two rails, %g wide' % (lbl, g['WB_MONOH_RAIL_W']),
+				  (len(rails), rails[0][2]['w']), (2, g['WB_MONOH_RAIL_W']))
+			check('%-14s rails run the whole frame' % lbl,
+				  rails[0][2]['d'], l + 2.0 * g['WB_MONOH_OVER_Z'])
+			#the two end ribs are solid across; the three between are split for the water
+			solid = [c for c in ribs if abs(c[2]['w'] - bw) < 1e-9]
+			split = [c for c in ribs if abs(c[2]['w'] - (bw - g['WB_MONOH_RIB_GAP']) / 2.0) < 1e-9]
+			check('%-14s 2 solid end ribs' % lbl, len(solid), 2)
+			check('%-14s 3 split ribs = 6 pieces' % lbl, len(split), 6)
+			check('%-14s named for its size' % lbl,
+				  made[0].startswith('grate_monohidden_%s_' % g['_wbSafe']('%gx%g' % (w, l), fragment=True)), True)
+			#this is the whole point of the design: the frame stands proud of the slab, so
+			#water runs down the gap around it rather than through it
+			check('%-14s frame is wider than the slab' % lbl,
+				  (bw - w) / 2.0, g['WB_MONOH_OVER_X'])
+
+		mc.calls = []
+		g['wbMonoH'](25.0, 65.0, bevel=0)
+		check('bevel 0 -> no polyBevel3', mc.find('polyBevel3'), [])
+		mc.calls = []
+		g['wbMonoH'](25.0, 65.0)
+		check('otherwise every piece is bevelled',
+			  len(mc.find('polyBevel3')), len(mc.find('polyCube')))
+		for kw, why in (({'count': 0}, 'zero count'), ({'width': 0}, 'zero width'),
+						({'length': 0}, 'zero length'), ({'bevel': 2.0}, 'bevel past half the frame')):
+			try:
+				g['wbMonoH'](**kw)
+				check('%s rejected' % why, False, True)
+			except ValueError:
+				check('%s rejected' % why, True, True)
+
+		print('\n[25] monoblock grates - the slotted one')
+		check('two presets', [q[0] for q in g['WB_MONO']], ['Mono 25 x 65', 'Mono 30 x 65'])
+		#the model: 11 slots of 1.5 x 12, three columns, middle one staggered half a pitch
+		check('slot size', (g['WB_MONO_SLOT_W'], g['WB_MONO_SLOT_L']), (1.5, 12.0))
+		check('25x65 has the model\'s 11 slots', len(g['_wbMonoSlots'](25.0, 65.0)), 11)
+		cols = g['_wbMonoSlotCols'](25.0)
+		check('   in 3 columns', len(cols), 3)
+		check('   columns symmetric', [round(a + b, 6) for a, b in zip(cols, reversed(cols))], [0.0] * 3)
+		full, half = g['_wbMonoSlotRows'](65.0)
+		check('   4 slots in the outer columns', [round(z, 1) for z in full], [-22.5, -7.5, 7.5, 22.5])
+		check('   3 in the staggered one', [round(z, 1) for z in half], [-15.0, 0.0, 15.0])
+		check('   staggered exactly half a pitch',
+			  round(half[0] - full[0], 6), g['WB_MONO_SLOT_PITCH'] / 2.0)
+		check('   margin to the slab end',
+			  round(65.0 / 2.0 - (full[-1] + g['WB_MONO_SLOT_L'] / 2.0), 4), g['WB_MONO_MARGIN'])
+		check('column count stays odd, so the stagger stays symmetric',
+			  [len(g['_wbMonoSlotCols'](w)) % 2 for w in (25.0, 30.0, 40.0, 60.0, 90.0)], [1] * 5)
+
+		print('   the slab decomposes into solid boxes - no boolean')
+		for w, l in ((25.0, 65.0), (30.0, 65.0), (40.0, 100.0)):
+			parts = g['_wbMonoSlab'](w, l)
+			slots = g['_wbMonoSlots'](w, l)
+			solid = sum((b - a) * (d - c) for a, b, c, d in parts)
+			want = w * l - len(slots) * g['WB_MONO_SLOT_W'] * g['WB_MONO_SLOT_L']
+			check('%gx%g solid area = slab - slots' % (w, l), round(solid, 6), round(want, 6))
+			#area alone could hide an overlap cancelling a gap, so check no two boxes meet
+			bad = 0
+			for i in range(len(parts)):
+				ax0, ax1, az0, az1 = parts[i]
+				for j in range(i + 1, len(parts)):
+					bx0, bx1, bz0, bz1 = parts[j]
+					if min(ax1, bx1) - max(ax0, bx0) > 1e-9 and min(az1, bz1) - max(az0, bz0) > 1e-9:
+						bad += 1
+			check('   and no two boxes overlap', bad, 0)
+			check('   every box is inside the slab',
+				  all(a >= -w / 2 - 1e-9 and b <= w / 2 + 1e-9 and c >= -l / 2 - 1e-9
+					  and d <= l / 2 + 1e-9 for a, b, c, d in parts), True)
 
 		print('   every preset button builds the size on its label')
 		g['wbUI']()
 		for lbl, w, l in g['WB_MONO']:
 			mc.calls = []
 			made = g['_wbMonoBtn'](w, l)
-			cubes = mc.find('polyCube')
-			slab = [c for c in cubes if c[2]['name'].endswith('_slab')][0][2]
-			rails = [c for c in cubes if '_rail' in c[2]['name']]
-			ribs = [c for c in cubes if '_rib' in c[2]['name']]
-			bw = w + 2.0 * g['WB_MONO_OVER_X']
-			check('%-14s slab %g x %g' % (lbl, w, l), (slab['w'], slab['d']), (w, l))
-			check('%-14s slab is %g thick' % (lbl, g['WB_MONO_H']), slab['h'], g['WB_MONO_H'])
-			check('%-14s two rails, %g wide' % (lbl, g['WB_MONO_RAIL_W']),
-				  (len(rails), rails[0][2]['w']), (2, g['WB_MONO_RAIL_W']))
-			check('%-14s rails run the whole frame' % lbl,
-				  rails[0][2]['d'], l + 2.0 * g['WB_MONO_OVER_Z'])
-			#the two end ribs are solid across; the three between are split for the water
-			solid = [c for c in ribs if abs(c[2]['w'] - bw) < 1e-9]
-			split = [c for c in ribs if abs(c[2]['w'] - (bw - g['WB_MONO_RIB_GAP']) / 2.0) < 1e-9]
-			check('%-14s 2 solid end ribs' % lbl, len(solid), 2)
-			check('%-14s 3 split ribs = 6 pieces' % lbl, len(split), 6)
+			slab = [c for c in mc.find('polyCube') if '_slab' in c[2]['name']]
+			check('%-14s %d slab boxes' % (lbl, len(g['_wbMonoSlab'](w, l))),
+				  len(slab), len(g['_wbMonoSlab'](w, l)))
+			check('%-14s slab is %g thick' % (lbl, g['WB_MONO_H']), slab[0][2]['h'], g['WB_MONO_H'])
 			check('%-14s named for its size' % lbl,
 				  made[0].startswith('grate_mono_%s_' % g['_wbSafe']('%gx%g' % (w, l), fragment=True)), True)
-			#this is the whole point of the design: the frame stands proud of the slab, so
-			#water runs down the gap around it rather than through it
-			check('%-14s frame is wider than the slab' % lbl,
-				  (bw - w) / 2.0, g['WB_MONO_OVER_X'])
-
-		mc.calls = []
-		g['wbMono'](25.0, 65.0, bevel=0)
-		check('bevel 0 -> no polyBevel3', mc.find('polyBevel3'), [])
-		mc.calls = []
-		g['wbMono'](25.0, 65.0)
-		check('otherwise every piece is bevelled',
-			  len(mc.find('polyBevel3')), len(mc.find('polyCube')))
-		for kw, why in (({'count': 0}, 'zero count'), ({'width': 0}, 'zero width'),
-						({'length': 0}, 'zero length'), ({'bevel': 2.0}, 'bevel past half the frame')):
+			check('%-14s not confused with the hidden one' % lbl,
+				  'monohidden' in made[0], False)
+		for kw, why in (({'count': 0}, 'zero count'), ({'width': 4.0}, 'too narrow for a slot'),
+						({'length': 0}, 'zero length'), ({'bevel': 1.0}, 'bevel past half the slot')):
 			try:
 				g['wbMono'](**kw)
 				check('%s rejected' % why, False, True)
