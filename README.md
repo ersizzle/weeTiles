@@ -218,6 +218,26 @@ up from whatever is already in the scene, so pressing a button twice does not cl
 
 Set Grout to `0` for a plain, unchamfered box.
 
+## Infinity tiles
+
+Serapool's **Infinity Karo** — a 33 x 66 tile with a full bullnose along its long
+edges. Four buttons in the Tiles section:
+
+| Button | Finished edges | Thickness | Stock code |
+| --- | --- | --- | --- |
+| Infinity Cift 0.76 | both long | 0.76 | FM3366IT-CIFT |
+| Infinity Cift 1.80 | both long | 1.80 | FM3366OIT-CIFT |
+| Infinity Tek 0.76 | one long | 0.76 | FM3366IT-TEK |
+| Infinity Tek 1.80 | one long | 1.80 | FM3366OIT-TEK |
+
+The bullnose is a true half round — radius half the thickness, so R0.38 and R0.90.
+**That radius is an assumption, not a measurement:** unlike everything else here there
+is no model for this piece, and serapool.com publishes the sizes but no profile. If
+the real edge is a chamfer or a smaller radius, `WB_INF_SEG` and the profile are the
+two things to change.
+
+Named `tile_infinity_cift_33x66_0p76_<nn>_geo`.
+
 ## Copings
 
 Built procedurally, not imported. Each profile is the real swept cross-section measured

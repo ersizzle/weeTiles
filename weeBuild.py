@@ -43,6 +43,21 @@ WB_THICK = 0.76      #tile thickness (Y) in cm
 WB_GROUT = 0.15      #chamfer per top edge -> a 0.3cm grout valley between two tiles
 WB_SPACE = 5.0       #gap between tiles when several are built at once
 
+#Infinity Karo, from serapool.com (Fossil Mix serisi, grup urunleri).  a 33x66 tile
+#with a full bullnose on its long edges: 'cift bitis' finishes both, 'tek bitis' one.
+#stock codes FM3366IT-CIFT / FM3366OIT-CIFT and FM3366IT-TEK / FM3366OIT-TEK.
+#the two thicknesses are the site's own; the bullnose radius is NOT published, so it
+#is taken as half the thickness - a true half round - which the user confirmed.
+WB_INFINITY = [
+	('Infinity Cift 0.76', 2, 0.76),
+	('Infinity Cift 1.80', 2, 1.80),
+	('Infinity Tek 0.76', 1, 0.76),
+	('Infinity Tek 1.80', 1, 1.80),
+]
+WB_INF_SIZE = (33.0, 66.0)     #(short, long) in cm, as the site lists it
+WB_INF_THICK = (0.76, 1.80)
+WB_INF_SEG = 8                 #segments in the bullnose half round
+
 #coping presets in panel order: (label, profile key, width cm, length cm).
 WB_COPINGS = [
 	('Flat 25 x 50', 'flat', 25.0, 50.0),
@@ -373,6 +388,91 @@ def _wbFlag(key, default):
 #  tiles - the geometry recipe is weeScript's _buildTile, unchanged
 ##############################################################################
 
+def _wbInfProfile(short, thick, ends, seg=WB_INF_SEG):
+	#cross-section of an infinity tile, in (X, Y): a slab 'short' across and 'thick' deep
+	#with a full bullnose - radius half the thickness - on one or both of its long edges.
+	#with both ends finished this is a stadium, the same shape as a monoblock slot.
+	short, thick = float(short), float(thick)
+	ends = int(ends)
+	if ends not in (1, 2):
+		raise ValueError('an infinity tile is finished on 1 or 2 edges.')
+	r = thick / 2.0
+	hx = short / 2.0
+	if r <= 0 or short <= ends * r:
+		raise ValueError('the tile is too narrow to carry its bullnose.')
+	seg = max(2, int(seg))
+	left = -hx + (r if ends == 2 else 0.0)
+	pts = [(left, -r), (hx - r, -r)]
+	#the near long edge is always bullnosed: a half round from the underside to the top
+	for i in range(1, seg):
+		a = -math.pi / 2.0 + math.pi * i / float(seg)
+		pts.append((hx - r + r * math.cos(a), r * math.sin(a)))
+	pts += [(hx - r, r), (left, r)]
+	if ends == 2:
+		for i in range(1, seg):
+			a = math.pi / 2.0 + math.pi * i / float(seg)
+			pts.append((-hx + r + r * math.cos(a), r * math.sin(a)))
+	#with one end finished there is nothing more to add: the loop closes from (-hx, r)
+	#straight down to (-hx, -r), and that closing edge IS the square end.  appending
+	#those two points explicitly just duplicates ones already in the list.
+	return pts
+def _wbBuildInf(short, long_, thick, ends, name, offset_x):
+	#swept exactly like a coping, then turned so the long edge lies along X the way every
+	#other tile in this file does.  geometry straddles Y=0, as weeScript's tiles do; only
+	#the pivot goes to the bottom.
+	short, long_, thick = float(short), float(long_), float(thick)
+	pts = [(x, y, 0.0) for x, y in _wbCCW(_wbInfProfile(short, thick, ends))]
+	body = mc.polyCreateFacet(p=pts, name=name)[0]
+	mc.polyExtrudeFacet(body + '.f[0]', constructionHistory=True, keepFacesTogether=True,
+						localTranslateZ=long_)
+	mc.delete(body, constructionHistory=True)
+	try:
+		mc.polyCloseBorder(body, constructionHistory=False)
+	except Exception:
+		pass
+	#the sweep runs along Z; turn it a quarter so the 66 lies along X, then bake it in
+	mc.rotate(0, 90, 0, body)
+	mc.makeIdentity(body, apply=True, rotate=True)
+	tf = mc.polyListComponentConversion(body, tf=True)
+	mc.polyProjection(tf, type='Planar', md='y')
+	#same UV recipe as the flat tiles: planar from the top, then turned 90 so the texture
+	#runs along the long edge.  NOT the copings' fill-the-square fit - these are tiles and
+	#have to sit in the same texture grid as the rest of the deck.
+	bb2 = mc.polyEvaluate(body, boundingBox2d=True)
+	mc.polyEditUV(mc.polyListComponentConversion(body, tuv=True),
+				  pivotU=(bb2[0][0] + bb2[0][1]) / 2.0, pivotV=(bb2[1][0] + bb2[1][1]) / 2.0,
+				  angle=90)
+	mc.delete(body, constructionHistory=True)
+	bb = mc.xform(body, q=True, ws=True, bb=True)
+	mc.move(offset_x - (bb[0] + bb[3]) / 2.0, 0.0, -(bb[2] + bb[5]) / 2.0, body, relative=True)
+	_wbBottomPivot(body)
+	return body
+def wbInfinity(ends=2, thick=None, short=None, long_=None, count=1, spacing=WB_SPACE):
+	#build 'count' infinity tiles in a row along X
+	short = float(WB_INF_SIZE[0] if short is None else short)
+	long_ = float(WB_INF_SIZE[1] if long_ is None else long_)
+	thick = float(WB_INF_THICK[0] if thick is None else thick)
+	ends = int(ends)
+	count = int(count)
+	if count < 1:
+		raise ValueError('need at least 1 tile.')
+	if long_ <= 0:
+		raise ValueError('tile length must be greater than 0.')
+	_wbInfProfile(short, thick, ends)      #validates ends and the bullnose fit
+	token = '%s_%s_%s' % ('cift' if ends == 2 else 'tek',
+						  _wbSafe('%gx%g' % (short, long_), fragment=True),
+						  _wbSafe('%g' % thick, fragment=True))
+	made = []
+	for i in range(count):
+		nm = _wbUnique('tile_infinity_' + token + '_%02d_geo')
+		made.append(_wbBuildInf(short, long_, thick, ends, nm, i * (long_ + spacing)))
+	mc.select(made)
+	print('weeBuild: built %d infinity tile(s), %s bitis, %g x %g x %gcm: %s'
+		  % (count, 'cift' if ends == 2 else 'tek', short, long_, thick, ', '.join(made)))
+	return made
+def _wbInfBtn(ends, thick):
+	#a preset button builds the size written on it - never through _wbNum
+	return wbInfinity(ends, thick, count=_wbNum('count', 1, integer=True))
 def _wbFaceCenterY(f):
 	#average world Y of a face's verts, used to pick the top / bottom face
 	verts = mc.ls(mc.polyListComponentConversion(f, ff=True, tv=True), flatten=True)
@@ -1272,6 +1372,12 @@ def wbUI():
 		_wbRow(f, [(lbl.replace(' x ', '\nx '), (lambda _s=s, _l=l: _wbTileBtn(_s, _l)), 'gray',
 					'build a %g x %gcm tile' % (s, l)) for lbl, s, l in WB_TILES[i:i + 4]])
 	_wbRow(f, [('Custom size...', wbTileCustom, 'amber', 'build any other short x long size')])
+	for i in range(0, len(WB_INFINITY), 2):
+		_wbRow(f, [(_wbWrap(lbl), (lambda _e=e, _t=t: _wbInfBtn(_e, _t)), 'indigo',
+					'Infinity Karo %s bitis, %g x %g x %gcm - bullnosed on %d long edge%s'
+					% ('cift' if e == 2 else 'tek', WB_INF_SIZE[0], WB_INF_SIZE[1], t, e,
+					   's' if e == 2 else ''))
+				   for lbl, e, t in WB_INFINITY[i:i + 2]])
 
 	f = mc.frameLayout(parent=main, label='  Copings', collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
 	#no Width / Length fields here: each button names its own size and the Custom

@@ -164,6 +164,26 @@ Regions in file order, marked with banner comments:
    it is proven in the user's pipeline. Geometry still straddles Y=0, as in weeScript;
    only the pivot goes to the bottom. `wbTile` is the scriptable entry point; presets
    live in `WB_TILES` as `(label, short, long)` — **long edge along X, short along Z**.
+3b. **infinity tiles** — `_wbInfProfile` is pure; `_wbBuildInf` sweeps it like a coping.
+   Presets in `WB_INFINITY`. **Serapool's “Infinity Karo”**: a 33×66 tile bullnosed on
+   its long edges — *çift bitiş* finishes both, *tek bitiş* one — in 0.76 and 1.80
+   thick (`FM3366IT-CIFT` / `FM3366OIT-CIFT`, `FM3366IT-TEK` / `FM3366OIT-TEK`).
+   - **There is no model for this one.** The sizes and stock codes come from
+     serapool.com; the site publishes no profile drawing, so the bullnose radius is
+     **assumed to be half the thickness** (a true half round: R0.38 and R0.90) and the
+     user confirmed both that and which edges are finished. Everything else in this
+     file is measured off a model — **this one is not**, so treat the radius as a
+     decision, not a fact.
+   - With both edges finished the section is a **stadium**, the same shape as a
+     monoblock slot. With one, the far end stays a square edge — and that edge is the
+     loop *closing*, so don't append its two corners explicitly or they duplicate
+     points already in the list. Check `[28]` asserts no duplicates for that reason.
+   - The sweep runs along Z like a coping, then the result is rotated 90° about Y and
+     frozen so the long edge lies along X, the way every other tile here does.
+   - UVs use the **tile** recipe (planar-Y then turned 90°), not the copings'
+     fill-the-square fit — these have to sit in the same texture grid as the deck.
+   - The site's own size list (5×5, 10×10, 11×33, 16.5×16.5, 16.5×66, 33×33, 33×66)
+     matches `WB_TILES` exactly, which is a useful check on those presets.
 4. **copings** — `_wbCopingProfile`/`_wbCopingNoses`/`_wbCopingRibs`/`_wbArea`/`_wbCCW`
    are **pure, no Maya**, so they are unit-testable like weeTiles' `_wtLayout`.
    `_wbBuildCoping` sweeps the profile with `polyCreateFacet` →

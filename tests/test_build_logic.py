@@ -8,6 +8,7 @@
 #polyCube was asked for, what the bevel offset was, and where each tile landed.
 
 import math
+import math as _math
 import os
 import re
 import shutil
@@ -166,6 +167,10 @@ class StubMC(object):
 		self._rec('polyEditUV', *a, **kw)
 	def delete(self, *a, **kw):
 		self._rec('delete', *a, **kw)
+	def rotate(self, *a, **kw):
+		self._rec('rotate', *a, **kw)
+	def makeIdentity(self, *a, **kw):
+		self._rec('makeIdentity', *a, **kw)
 	def move(self, *a, **kw):
 		self._rec('move', *a, **kw)
 	def xform(self, *a, **kw):
@@ -1273,6 +1278,77 @@ def main():
 			check('longer-than-wide is enforced', False, True)
 		except ValueError:
 			check('longer-than-wide is enforced', True, True)
+
+		print('\n[28] Infinity Karo - the 33x66 bullnosed tiles')
+		check('four presets', [q[0] for q in g['WB_INFINITY']],
+			  ['Infinity Cift 0.76', 'Infinity Cift 1.80',
+			   'Infinity Tek 0.76', 'Infinity Tek 1.80'])
+		check('the sizes serapool.com lists', g['WB_INF_SIZE'], (33.0, 66.0))
+		check('   and the two thicknesses', g['WB_INF_THICK'], (0.76, 1.80))
+		for ends, thick in ((2, 0.76), (2, 1.80), (1, 0.76), (1, 1.80)):
+			pr = g['_wbInfProfile'](33.0, thick, ends)
+			xs = [q[0] for q in pr]
+			ys = [q[1] for q in pr]
+			r = thick / 2.0
+			check('%d-edge %g: %g across' % (ends, thick, 33.0),
+				  round(max(xs) - min(xs), 6), 33.0)
+			check('   %g thick' % thick, round(max(ys) - min(ys), 6), thick)
+			#a full bullnose removes (2r*r - pi*r^2/2) of the rectangle at each finished end
+			n = len(pr)
+			a = abs(sum(pr[i][0] * pr[(i + 1) % n][1] - pr[(i + 1) % n][0] * pr[i][1]
+						for i in range(n)) / 2.0)
+			ideal = 33.0 * thick - ends * (2 * r * r - _math.pi * r * r / 2.0)
+			check('   area is the bullnosed one', abs(a - ideal) < 0.07, True)
+			check('   not the plain rectangle', abs(a - 33.0 * thick) > abs(a - ideal), True)
+			#every point on a nose must sit on the half-round
+			cap = [q for q in pr if q[0] > 33.0 / 2.0 - r + 1e-9]
+			off = max(abs(_math.hypot(q[0] - (33.0 / 2.0 - r), q[1]) - r) for q in cap)
+			check('   nose points sit on the r=%.2f circle' % r, off < 1e-9, True)
+		#cift is symmetric, tek is flat at one end
+		cift = g['_wbInfProfile'](33.0, 1.80, 2)
+		tek = g['_wbInfProfile'](33.0, 1.80, 1)
+		check('cift bitis is symmetric',
+			  sorted((round(-x, 6), round(y, 6)) for x, y in cift) ==
+			  sorted((round(x, 6), round(y, 6)) for x, y in cift), True)
+		check('tek bitis is not', sorted((round(-x, 6), round(y, 6)) for x, y in tek) ==
+			  sorted((round(x, 6), round(y, 6)) for x, y in tek), False)
+		#tek's far end is a square edge: two points at -16.5, top and bottom, with the
+		#loop closing between them.  cift's far end is a nose, so it touches -16.5 at a
+		#single tangent point.
+		check('tek keeps a square edge at one end',
+			  len([q for q in tek if abs(q[0] + 16.5) < 1e-9]), 2)
+		check('   and no duplicated points anywhere',
+			  len(set((round(x, 6), round(y, 6)) for x, y in tek)), len(tek))
+		check('cift meets -16.5 at one tangent point',
+			  len([q for q in cift if abs(q[0] + 16.5) < 1e-9]), 1)
+		check('   and has no duplicates either',
+			  len(set((round(x, 6), round(y, 6)) for x, y in cift)), len(cift))
+		check('cift carries more nose points', len(cift) > len(tek), True)
+
+		print('   every preset button builds what its label says')
+		g['wbUI']()
+		for lbl, e, t in g['WB_INFINITY']:
+			mc.calls = []
+			made = g['_wbInfBtn'](e, t)
+			check('%-20s swept the long edge' % lbl,
+				  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], 66.0)
+			check('%-20s turned so 66 lies along X' % lbl,
+				  mc.find('rotate')[0][1][1], 90)
+			check('%-20s rotation baked in' % lbl, bool(mc.find('makeIdentity')), True)
+			check('%-20s UVs turned 90 like the tiles' % lbl,
+				  mc.find('polyEditUV')[0][2]['angle'], 90)
+			check('%-20s named for what it is' % lbl,
+				  made[0].startswith('tile_infinity_%s_33x66_%s_'
+									 % ('cift' if e == 2 else 'tek',
+										g['_wbSafe']('%g' % t, fragment=True))), True)
+		for kw, why in (({'ends': 0}, 'no finished edge'), ({'ends': 3}, 'three edges'),
+						({'count': 0}, 'zero count'), ({'long_': 0}, 'zero length'),
+						({'short': 1.0, 'thick': 1.8}, 'too narrow for the bullnose')):
+			try:
+				g['wbInfinity'](**kw)
+				check('%s rejected' % why, False, True)
+			except ValueError:
+				check('%s rejected' % why, True, True)
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
