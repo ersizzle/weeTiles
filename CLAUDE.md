@@ -269,10 +269,12 @@ Regions in file order, marked with banner comments:
      at a fixed Y, and holding the radius shrank a narrow slat until the connector
      **stood 0.154 proud of the walking surface at 15cm wide**. Check `[23]` asserts the
      clearance at every width — keep that if you touch the camber.
-   - The source has **two concentric cylinders** on the connector axis: a **2.060** one
-     you see through the slots and a 0.404 core hidden inside it. `WB_GRATE_ROD` is the
-     2.060; the core is not modelled because none of it is ever visible. It runs
-     `WB_GRATE_ROD_OVER` (0.45) past the slats at each end, as the model does.
+   - The source has **two concentric cylinders** on the connector axis: a 2.060 one and
+     a 0.404 core inside it. `WB_GRATE_ROD` is **1.232, the midpoint** — the core alone
+     read too thin in the viewport and the 2.060 too heavy, so the user picked the
+     middle by eye. **That is a deliberate deviation from the model, not a measurement**;
+     don't “correct” it back to either source value. The core is not modelled at all.
+     It runs `WB_GRATE_ROD_OVER` (0.45) past the slats at each end, as the model does.
    - Slats are swept with the same calls as a coping — `polyCreateFacet` →
      `polyExtrudeFacet` → `polyCloseBorder` → `_wbCapEdges` + `polyBevel3` — so
      `_wbCCW` orients each one and the stored winding does not matter.

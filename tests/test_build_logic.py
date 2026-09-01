@@ -963,8 +963,8 @@ def main():
 				  len(rods), len(g['_wbGrateCols'](w)))
 			check('%-14s rods overhang like the model' % lbl,
 				  rods[0][2]['h'], l + 2.0 * g['WB_GRATE_ROD_OVER'])
-			check('%-14s connector is the 2.06, not the hidden core' % lbl,
-				  rods[0][2]['r'] * 2.0, 2.06)
+			check('%-14s connector is the chosen 1.232' % lbl,
+				  round(rods[0][2]['r'] * 2.0, 4), 1.232)
 			check('%-14s named for its size' % lbl,
 				  made[0].startswith('grate_flex_%s_' % g['_wbSafe']('%gx%g' % (w, l), fragment=True)), True)
 			#the slats must fill the run exactly, centred on the origin

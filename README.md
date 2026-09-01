@@ -294,9 +294,9 @@ The camber keeps the same **rise** at every size, so a slat is always 2.52 tall.
 to be: the connectors are fixed hardware, and a shorter slat would let them poke up
 through the walking surface.
 
-The connectors are the **2.06** cylinders you can see through the slots, running 0.45
-past the slats at each end. (The source model also has a 0.404 core hidden inside each
-one; it is not modelled, since none of it is ever visible.)
+The connectors are **1.232** across, running 0.45 past the slats at each end. The source
+model has two concentric cylinders here — a 2.06 and a 0.404 core inside it — and this
+sits midway between them, chosen by eye rather than measured.
 
 ## Grate and Coping models
 

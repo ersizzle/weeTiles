@@ -172,9 +172,10 @@ WB_GRATE_Y0 = -0.02      #slat underside, so it sits on the floor like the copin
 WB_GRATE_INSET = 2.495   #hardware column inset from each end of a slat
 WB_GRATE_COLPITCH = 10.0 #nominal spacing between hardware columns
 #the source model has TWO concentric cylinders on this axis: a 2.060 connector and a
-#0.404 core hidden inside it.  2.060 is the one you can see through the slots; the
-#core is not modelled because nothing of it is ever visible.
-WB_GRATE_ROD = 2.06      #connector diameter
+#0.404 core hidden inside it.  the core alone read far too thin and the 2.060 too
+#heavy, so this sits at the midpoint of the pair - the user's call, by eye in the
+#viewport, not a measurement.  the core is not modelled at all: nothing of it shows.
+WB_GRATE_ROD = 1.232     #connector diameter, midway between the model's 0.404 and 2.060
 WB_GRATE_RODY = 1.301    #its axis height, measured
 WB_GRATE_ROD_OVER = 0.45 #how far it runs past the slats at each end, as the model does
 WB_GRATE_BEVEL = 0.08    #chamfer on the slat ends, where the sweep is cut
