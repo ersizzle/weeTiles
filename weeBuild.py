@@ -171,8 +171,12 @@ WB_GRATE_THICK = 2.532   #slat height
 WB_GRATE_Y0 = -0.02      #slat underside, so it sits on the floor like the copings
 WB_GRATE_INSET = 2.495   #hardware column inset from each end of a slat
 WB_GRATE_COLPITCH = 10.0 #nominal spacing between hardware columns
-WB_GRATE_ROD = 0.404     #rod diameter
-WB_GRATE_RODY = 1.30     #rod height above the floor
+#the source model has TWO concentric cylinders on this axis: a 2.060 connector and a
+#0.404 core hidden inside it.  2.060 is the one you can see through the slots; the
+#core is not modelled because nothing of it is ever visible.
+WB_GRATE_ROD = 2.06      #connector diameter
+WB_GRATE_RODY = 1.301    #its axis height, measured
+WB_GRATE_ROD_OVER = 0.45 #how far it runs past the slats at each end, as the model does
 WB_GRATE_BEVEL = 0.08    #chamfer on the slat ends, where the sweep is cut
 
 #the slat cross-section, sliced out of the source model.  it is NOT a box: the top is a
@@ -186,7 +190,12 @@ WB_SLAT_END = [
 	(0.5848, 1.8756), (0.6122, 1.9207), (0.6559, 1.9535), (0.6997, 1.9863),
 	(0.7506, 2.0), (0.8015, 2.0138),
 ]
-WB_SLAT_CAMBER = 137.81   #top camber radius; rise 0.502 across the 24.99 model
+#the camber holds its RISE, not its radius, so every slat is the same height whatever
+#the width.  it has to be: the connector is fixed hardware sitting at a fixed Y, and
+#holding the radius instead shrinks a narrow slat until the connector pokes out
+#through the top - at 15cm wide it stood 0.154 proud.  the radius therefore falls out
+#of the width (about 45 at 15cm, 136 at 25, 201 at 30) rather than being fixed.
+WB_SLAT_RISE = 0.502      #camber height above the edge, measured off the model
 WB_SLAT_TOP = 2.0138      #Y where the corner arc hands over to the camber
 WB_SLAT_BOT = -0.0197     #underside, between the channels
 WB_SLAT_SEG = 16          #segments the camber is drawn with
@@ -644,10 +653,12 @@ def _wbSlatProfile(width, seg=WB_SLAT_SEG):
 		raise ValueError('grate slat is too narrow to carry its edge profile.')
 	pts = [(-half + dx, y) for dx, y in WB_SLAT_END]
 	hs = half - inset
-	R = WB_SLAT_CAMBER
-	if R <= hs:
-		raise ValueError('grate slat is too wide for its camber radius.')
-	base = math.sqrt(R * R - hs * hs)
+	rise = WB_SLAT_RISE
+	if rise <= 0:
+		raise ValueError('grate slat camber rise must be greater than 0.')
+	#the arc through (+-hs, 0) and (0, rise)
+	R = (hs * hs + rise * rise) / (2.0 * rise)
+	base = R - rise
 	for i in range(1, int(seg)):
 		x = -hs + 2.0 * hs * i / float(seg)
 		pts.append((x, WB_SLAT_TOP + math.sqrt(max(R * R - x * x, 0.0)) - base))
@@ -713,8 +724,9 @@ def _wbBuildGrate(width, length, name, offset_x, bevel=WB_GRATE_BEVEL):
 		mc.move(0.0, 0.0, -length / 2.0 + i * (sz + WB_GRATE_GAP), s)
 		parts.append(s)
 	for j, cx in enumerate(_wbGrateCols(width)):
-		r = mc.polyCylinder(r=WB_GRATE_ROD / 2.0, h=length, axis=(0, 0, 1),
-							subdivisionsAxis=8, name='%s_rod%02d' % (name, j + 1))[0]
+		r = mc.polyCylinder(r=WB_GRATE_ROD / 2.0, h=length + 2.0 * WB_GRATE_ROD_OVER,
+							axis=(0, 0, 1), subdivisionsAxis=16,
+							name='%s_rod%02d' % (name, j + 1))[0]
 		mc.move(cx, WB_GRATE_RODY, 0.0, r)
 		parts.append(r)
 	body = parts[0]

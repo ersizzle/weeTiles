@@ -260,13 +260,19 @@ Regions in file order, marked with banner comments:
    - `WB_SLAT_END` is the slat's edge detail **measured by slicing one slat**: bottom
      chamfer, a side draughting **17.11°** inward, then an **R0.2905** corner arc onto
      the top. It is fixed — width never changes it, exactly like a coping nose.
-     `_wbSlatProfile` joins the two edges with an **R137.81** camber arc (a true arc,
-     not a parabola: circle dev 0.008 against parabola 0.029) and closes the section
-     with `_wbSlatUnder`, two channels 1.398 × 0.312 with 2.36 ramps.
-   - **The camber radius is held, so the crown grows with width**: 0.163 at 15cm, 0.497
-     at 25 (the model measures 0.502), 0.733 at 30. That follows the shared-radius
-     pattern the coping bullnoses showed. If the real product holds the *rise* instead,
-     this is the constant to change.
+     `_wbSlatProfile` joins the two edges with a camber arc (a true arc, not a
+     parabola: circle dev 0.008 against parabola 0.029) and closes the section with
+     `_wbSlatUnder`, two channels 1.398 × 0.312 with 2.36 ramps.
+   - **The camber holds its RISE (`WB_SLAT_RISE` 0.502), not its radius**, so every
+     slat is 2.5158 tall whatever the width and the radius falls out of it (≈45 at
+     15cm, 136 at 25, 201 at 30). This is not cosmetic: the connector is fixed hardware
+     at a fixed Y, and holding the radius shrank a narrow slat until the connector
+     **stood 0.154 proud of the walking surface at 15cm wide**. Check `[23]` asserts the
+     clearance at every width — keep that if you touch the camber.
+   - The source has **two concentric cylinders** on the connector axis: a **2.060** one
+     you see through the slots and a 0.404 core hidden inside it. `WB_GRATE_ROD` is the
+     2.060; the core is not modelled because none of it is ever visible. It runs
+     `WB_GRATE_ROD_OVER` (0.45) past the slats at each end, as the model does.
    - Slats are swept with the same calls as a coping — `polyCreateFacet` →
      `polyExtrudeFacet` → `polyCloseBorder` → `_wbCapEdges` + `polyBevel3` — so
      `_wbCCW` orients each one and the stored winding does not matter.

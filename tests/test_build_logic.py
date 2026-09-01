@@ -961,7 +961,10 @@ def main():
 				  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], z)
 			check('%-14s %d rods' % (lbl, len(g['_wbGrateCols'](w))),
 				  len(rods), len(g['_wbGrateCols'](w)))
-			check('%-14s rods run the full length' % lbl, rods[0][2]['h'], l)
+			check('%-14s rods overhang like the model' % lbl,
+				  rods[0][2]['h'], l + 2.0 * g['WB_GRATE_ROD_OVER'])
+			check('%-14s connector is the 2.06, not the hidden core' % lbl,
+				  rods[0][2]['r'] * 2.0, 2.06)
 			check('%-14s named for its size' % lbl,
 				  made[0].startswith('grate_flex_%s_' % g['_wbSafe']('%gx%g' % (w, l), fragment=True)), True)
 			#the slats must fill the run exactly, centred on the origin
@@ -1008,15 +1011,29 @@ def main():
 		#the top really is an arc of the measured radius
 		top = [q for q in pr if q[1] >= g['WB_SLAT_TOP'] - 1e-9]
 		_cx, _cy, r, dev = fitcirc(top)
-		check('top is a %g camber' % g['WB_SLAT_CAMBER'], round(r, 1), 137.8)
-		check('   and a true arc', dev < 1e-6, True)
+		check('the top is a true arc', dev < 1e-6, True)
 		check('   crowned upward', round(_cy, 1) < 0, True)
-		#the measured slat is 24.99 wide and 2.5158 tall; reproduce that
-		m = g['_wbSlatProfile'](24.99)
-		check('at the model width the top matches to 0.005',
-			  abs(max(q[1] for q in m) - 2.5158) < 0.006, True)
-		check('   and the underside matches exactly',
-			  round(min(q[1] for q in m), 4), g['WB_SLAT_BOT'])
+		check('   radius at 25cm', round(r, 1), 136.6)
+		#the camber holds its RISE, not its radius, so the slat is the same height at
+		#every width - and it has to be, see the clearance check below
+		heights = set(round(max(q[1] for q in g['_wbSlatProfile'](w)), 4)
+					   for w in (15.0, 20.0, 25.0, 30.0, 24.99))
+		check('every width builds the same slat height', heights, set([2.5158]))
+		check('   and it is the measured 2.5158', round(g['WB_SLAT_TOP'] + g['WB_SLAT_RISE'], 4), 2.5158)
+		check('radius grows with width, it is not fixed',
+			  round(fitcirc([q for q in g['_wbSlatProfile'](15.0)
+							 if q[1] >= g['WB_SLAT_TOP'] - 1e-9])[2], 1), 44.9)
+		#the connector is fixed hardware; if the slat ever gets shorter than it, it pokes
+		#out through the walking surface.  holding the radius instead did exactly that -
+		#0.154 proud at 15cm wide.
+		rodtop = g['WB_GRATE_RODY'] + g['WB_GRATE_ROD'] / 2.0
+		for w in (15.0, 20.0, 25.0, 30.0):
+			clr = max(q[1] for q in g['_wbSlatProfile'](w)) - rodtop
+			check('%gcm: connector sits %.4f below the surface' % (w, clr), clr > 0.1, True)
+		check('   the connector is buried, not proud',
+			  round(g['WB_GRATE_RODY'] - g['WB_GRATE_ROD'] / 2.0, 4) > g['WB_SLAT_BOT'], True)
+		check('the underside matches the model exactly',
+			  round(min(q[1] for q in g['_wbSlatProfile'](24.99)), 4), g['WB_SLAT_BOT'])
 		#the sides lean in, they are not vertical
 		lo = min(pr, key=lambda q: q[1] if q[0] < 0 else 99)
 		check('the side draughts inward',
@@ -1026,12 +1043,17 @@ def main():
 		check('underside is monotonic in X',
 			  all(u[i][0] > u[i + 1][0] for i in range(len(u) - 1)), True)
 		check('   with two channels', sum(1 for q in u if abs(q[1] - (g['WB_SLAT_BOT'] + g['WB_SLAT_CH_D'])) < 1e-9), 4)
-		for bad, why in ((1.0, 'narrower than its own edge detail'), (400.0, 'wider than the camber radius')):
-			try:
-				g['_wbSlatProfile'](bad)
-				check('%g rejected (%s)' % (bad, why), False, True)
-			except ValueError:
-				check('%g rejected (%s)' % (bad, why), True, True)
+		try:
+			g['_wbSlatProfile'](1.0)
+			check('narrower than its own edge detail is rejected', False, True)
+		except ValueError:
+			check('narrower than its own edge detail is rejected', True, True)
+		#with the rise held there is no upper bound any more - the radius simply grows,
+		#where a fixed radius used to fail once the half span passed it
+		wide = g['_wbSlatProfile'](400.0)
+		check('a very wide slat still builds', round(max(q[0] for q in wide)
+											   - min(q[0] for q in wide), 4), 400.0)
+		check('   still the same height', round(max(q[1] for q in wide), 4), 2.5158)
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
