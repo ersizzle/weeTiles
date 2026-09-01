@@ -304,7 +304,9 @@ Two kinds, both in the Grates section.
 
 **Mono 25 x 65** and **Mono 30 x 65** are the slotted ones: a slab with **11 slots of
 1.5 x 12**, in three columns with the middle column staggered half a pitch against the
-outer two, and a 4cm solid margin all round. Named `grate_mono_<size>_<nn>_geo`.
+outer two, and a 4cm solid margin all round. The slots are cut with a boolean, so the
+slab is a single clean shell rather than a set of pieces butted together. Named
+`grate_mono_<size>_<nn>_geo`.
 
 **Hidden 25 x 65** and **Hidden 30 x 65** have no slots at all, by design — the slab is
 solid and the water runs *around* it, which is why the frame underneath stands 1cm proud

@@ -139,6 +139,13 @@ class StubMC(object):
 		return ['polyExtrudeFace1']
 	def polyCloseBorder(self, *a, **kw):
 		self._rec('polyCloseBorder', *a, **kw)
+	def polyCBoolOp(self, a, b, **kw):
+		nm = kw.get('name') or kw.get('n') or 'polyBool1'
+		self._rec('polyCBoolOp', a, b, **kw)
+		self.objects.discard(a)
+		self.objects.discard(b)
+		self.objects.add(nm)
+		return [nm, 'polyCBoolOp1']
 	def polyUnite(self, parts, **kw):
 		nm = kw.get('name') or kw.get('n') or 'polySurface1'
 		self._rec('polyUnite', parts, **kw)
@@ -1146,35 +1153,37 @@ def main():
 		check('column count stays odd, so the stagger stays symmetric',
 			  [len(g['_wbMonoSlotCols'](w)) % 2 for w in (25.0, 30.0, 40.0, 60.0, 90.0)], [1] * 5)
 
-		print('   the slab decomposes into solid boxes - no boolean')
-		for w, l in ((25.0, 65.0), (30.0, 65.0), (40.0, 100.0)):
-			parts = g['_wbMonoSlab'](w, l)
-			slots = g['_wbMonoSlots'](w, l)
-			solid = sum((b - a) * (d - c) for a, b, c, d in parts)
-			want = w * l - len(slots) * g['WB_MONO_SLOT_W'] * g['WB_MONO_SLOT_L']
-			check('%gx%g solid area = slab - slots' % (w, l), round(solid, 6), round(want, 6))
-			#area alone could hide an overlap cancelling a gap, so check no two boxes meet
-			bad = 0
-			for i in range(len(parts)):
-				ax0, ax1, az0, az1 = parts[i]
-				for j in range(i + 1, len(parts)):
-					bx0, bx1, bz0, bz1 = parts[j]
-					if min(ax1, bx1) - max(ax0, bx0) > 1e-9 and min(az1, bz1) - max(az0, bz0) > 1e-9:
-						bad += 1
-			check('   and no two boxes overlap', bad, 0)
-			check('   every box is inside the slab',
-				  all(a >= -w / 2 - 1e-9 and b <= w / 2 + 1e-9 and c >= -l / 2 - 1e-9
-					  and d <= l / 2 + 1e-9 for a, b, c, d in parts), True)
-
+		print('   the slab is ONE box with the slots cut out')
+		#building it as a jigsaw of solid pieces leaves coincident internal faces
+		#wherever two pieces meet.  the source is a single watertight shell - every
+		#edge used exactly twice - so the slots have to be cut, not assembled.
+		mc.calls = []
+		g['wbMono'](25.0, 65.0)
+		slabs = [c for c in mc.find('polyCube') if c[2]['name'].endswith('_slab')]
+		cutters = [c for c in mc.find('polyCube') if '_slot' in c[2]['name']]
+		check('exactly one slab box', len(slabs), 1)
+		check('   the full slab, uncut', (slabs[0][2]['w'], slabs[0][2]['d']), (25.0, 65.0))
+		check('one cutter per slot', len(cutters), 11)
+		check('   each the slot size', (cutters[0][2]['w'], cutters[0][2]['d']),
+			  (g['WB_MONO_SLOT_W'], g['WB_MONO_SLOT_L']))
+		check('   and taller than the slab, so the cut goes through',
+			  cutters[0][2]['h'] > g['WB_MONO_H'], True)
+		bools = mc.find('polyCBoolOp')
+		check('one boolean, not eighteen boxes', len(bools), 1)
+		check('   and it is a difference', bools[0][2]['op'], 2)
+		check('   cutters united into one cutter first',
+			  any(len(c[1][0]) == 11 for c in mc.find('polyUnite')), True)
 		print('   every preset button builds the size on its label')
 		g['wbUI']()
 		for lbl, w, l in g['WB_MONO']:
 			mc.calls = []
 			made = g['_wbMonoBtn'](w, l)
-			slab = [c for c in mc.find('polyCube') if '_slab' in c[2]['name']]
-			check('%-14s %d slab boxes' % (lbl, len(g['_wbMonoSlab'](w, l))),
-				  len(slab), len(g['_wbMonoSlab'](w, l)))
+			slab = [c for c in mc.find('polyCube') if c[2]['name'].endswith('_slab')]
+			check('%-14s one slab, %g wide' % (lbl, w), (len(slab), slab[0][2]['w']), (1, w))
 			check('%-14s slab is %g thick' % (lbl, g['WB_MONO_H']), slab[0][2]['h'], g['WB_MONO_H'])
+			check('%-14s %d slots cut' % (lbl, len(g['_wbMonoSlots'](w, l))),
+				  len([c for c in mc.find('polyCube') if '_slot' in c[2]['name']]),
+				  len(g['_wbMonoSlots'](w, l)))
 			check('%-14s named for its size' % lbl,
 				  made[0].startswith('grate_mono_%s_' % g['_wbSafe']('%gx%g' % (w, l), fragment=True)), True)
 			check('%-14s not confused with the hidden one' % lbl,

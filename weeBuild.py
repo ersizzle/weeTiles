@@ -719,6 +719,20 @@ def _wbBuildSlat(profile, length, name):
 	except Exception:
 		pass
 	return s
+def _wbBool(a, b, op, name):
+	#Maya has had two boolean entry points; use the cmds one and fall back to the MEL
+	#action weeScript has always driven.  op: 1 union, 2 difference, 3 intersection.
+	try:
+		out = mc.polyCBoolOp(a, b, op=op, constructionHistory=False, name=name)[0]
+	except Exception:
+		mc.select(a)
+		mc.select(b, add=True)
+		mel.eval('polyPerformBooleanAction %d o 0;' % op)
+		sel = mc.ls(selection=True) or []
+		out = sel[0] if sel else a
+	if mc.objExists(out) and out != name and not mc.objExists(name):
+		out = mc.rename(out, name)
+	return out
 def _wbMonoSlotCols(width, pitch=WB_MONO_COL_MAX):
 	#slot column X centres.  the count is always ODD, which is what keeps the stagger
 	#symmetric: every other column is offset half a pitch, so an even count would leave
@@ -740,32 +754,6 @@ def _wbMonoSlotRows(length):
 	ext = (n - 1) * WB_MONO_SLOT_PITCH / 2.0
 	full = [-ext + WB_MONO_SLOT_PITCH * i for i in range(n)]
 	return full, [z + WB_MONO_SLOT_PITCH / 2.0 for z in full[:-1]]
-def _wbMonoSlab(width, length):
-	#the perforated slab as a list of solid (x0, x1, z0, z1) boxes.  no boolean needed:
-	#the slots sit on a regular grid, so the solid part is the strips between the slot
-	#columns plus the bridges between the slots inside each column.  pure, no Maya.
-	W, L = float(width), float(length)
-	cols = _wbMonoSlotCols(W)
-	full, half = _wbMonoSlotRows(L)
-	hw, hl = WB_MONO_SLOT_W / 2.0, WB_MONO_SLOT_L / 2.0
-	parts = []
-	edges = [-W / 2.0]
-	for c in cols:
-		edges += [c - hw, c + hw]
-	edges.append(W / 2.0)
-	for i in range(0, len(edges), 2):
-		if edges[i + 1] - edges[i] > 1e-9:
-			parts.append((edges[i], edges[i + 1], -L / 2.0, L / 2.0))
-	for k, c in enumerate(cols):
-		zs = full if k % 2 == 0 else half
-		b = [-L / 2.0]
-		for z in zs:
-			b += [z - hl, z + hl]
-		b.append(L / 2.0)
-		for i in range(0, len(b), 2):
-			if b[i + 1] - b[i] > 1e-9:
-				parts.append((c - hw, c + hw, b[i], b[i + 1]))
-	return parts
 def _wbMonoSlots(width, length):
 	#the slots themselves, as (x, z) centres - only used for reporting and testing
 	cols = _wbMonoSlotCols(float(width))
@@ -778,11 +766,25 @@ def _wbMonoSlots(width, length):
 def _wbBuildMono(width, length, name, offset_x, bevel=WB_MONO_BEVEL):
 	#a monoblock grate: a slotted slab on the same kind of frame as the hidden one.
 	width, length, bevel = float(width), float(length), float(bevel)
-	parts = []
-	for i, (x0, x1, z0, z1) in enumerate(_wbMonoSlab(width, length)):
-		b = mc.polyCube(w=x1 - x0, h=WB_MONO_H, d=z1 - z0, name='%s_slab%02d' % (name, i + 1))[0]
-		mc.move((x0 + x1) / 2.0, WB_MONO_Y + WB_MONO_H / 2.0, (z0 + z1) / 2.0, b)
-		parts.append(b)
+	#the slab is ONE box with the slots cut out of it.  building it as a jigsaw of
+	#solid pieces instead leaves coincident internal faces wherever two pieces meet,
+	#which z-fights and shades badly - the source is a single watertight shell, every
+	#edge used exactly twice, so it was cut and this has to be too.
+	slab = mc.polyCube(w=width, h=WB_MONO_H, d=length, name=name + '_slab')[0]
+	mc.move(0.0, WB_MONO_Y + WB_MONO_H / 2.0, 0.0, slab)
+	cutters = []
+	for i, (cx, cz) in enumerate(_wbMonoSlots(width, length)):
+		#taller than the slab so the cut goes clean through both faces
+		c = mc.polyCube(w=WB_MONO_SLOT_W, h=WB_MONO_H * 3.0, d=WB_MONO_SLOT_L,
+						name='%s_slot%02d' % (name, i + 1))[0]
+		mc.move(cx, WB_MONO_Y + WB_MONO_H / 2.0, cz, c)
+		cutters.append(c)
+	if cutters:
+		cut = cutters[0]
+		if len(cutters) > 1:
+			cut = mc.polyUnite(cutters, constructionHistory=False, name=name + '_cut')[0]
+		slab = _wbBool(slab, cut, 2, name + '_slab')
+	parts = [slab]
 	bw = width + 2.0 * WB_MONOH_OVER_X
 	bl = length + 2.0 * WB_MONOH_OVER_Z
 	rx = bw / 2.0 - WB_MONOH_RAIL_IN - WB_MONOH_RAIL_W / 2.0

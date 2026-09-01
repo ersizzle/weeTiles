@@ -302,11 +302,19 @@ Regions in file order, marked with banner comments:
    - **Slotted** (`WB_MONO`, `wbMono`): a slab carrying **11 slots of 1.500 × 12.000** in
      three columns, the middle one **staggered half a pitch** (15.0) against the outer
      two — 4 slots in the outer columns, 3 in the middle. 4.0 solid margin all round.
-   - `_wbMonoSlab` returns the slab as a list of solid `(x0, x1, z0, z1)` boxes — **no
-     boolean**. The slots sit on a regular grid, so the solid part is exactly the strips
-     between the columns plus the bridges between slots within a column. Check `[25]`
-     proves it is an exact tiling: the areas sum to `W×L − slots` **and** no two boxes
-     overlap, which area alone would not catch.
+   - **The slab is ONE box with the slots cut out by a boolean.** A first pass built it
+     as a jigsaw of 18 solid boxes instead — the areas tiled exactly, but every seam
+     left a pair of coincident internal faces, which z-fights and shades badly. The
+     source is a **single watertight manifold shell** (65,526 edges, every one used
+     exactly twice, one connected component), so it was cut and this must be too.
+     **Don't rebuild it from solid pieces.**
+   - `_wbBool` wraps the boolean: `polyCBoolOp` with a fallback to the MEL
+     `polyPerformBooleanAction` that weeScript's `_wtTrim` has always driven. Cutters
+     are made 3× the slab height so the cut passes cleanly through both faces, and are
+     united into one before the single difference.
+   - The slot walls are **vertical and unchamfered** — sliced through a slot, both
+     walls run straight from Y 0.8 to 2.4 exactly 1.500 apart. A plain box cutter is
+     therefore right; don't add a draft or a fillet to it.
    - `_wbMonoSlotCols` keeps the column count **odd**. That is not cosmetic: every other
      column is staggered, so an even count leaves the two middle columns matching and the
      pattern breaks.
