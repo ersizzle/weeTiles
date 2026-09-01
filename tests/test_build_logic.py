@@ -951,23 +951,29 @@ def main():
 		for lbl, w, l in g['WB_GRATES']:
 			mc.calls = []
 			made = g['_wbGrateBtn'](w, l)
-			cubes = mc.find('polyCube')
+			slats = mc.find('polyCreateFacet')
 			rods = mc.find('polyCylinder')
 			n, z = g['_wbGrateSlats'](l)
-			check('%-14s %d slats' % (lbl, n), len(cubes), n)
-			check('%-14s slat %g wide' % (lbl, w), cubes[0][2]['w'], w)
+			check('%-14s %d slats' % (lbl, n), len(slats), n)
+			sx = [q[0] for q in slats[0][2]['p']]
+			check('%-14s slat %g wide' % (lbl, w), round(max(sx) - min(sx), 4), w)
+			check('%-14s slat is swept, not a box' % lbl,
+				  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], z)
 			check('%-14s %d rods' % (lbl, len(g['_wbGrateCols'](w))),
 				  len(rods), len(g['_wbGrateCols'](w)))
 			check('%-14s rods run the full length' % lbl, rods[0][2]['h'], l)
 			check('%-14s named for its size' % lbl,
 				  made[0].startswith('grate_flex_%s_' % g['_wbSafe']('%gx%g' % (w, l), fragment=True)), True)
 			#the slats must fill the run exactly, centred on the origin
+			#the sweep starts at the move position and runs +Z, so the run is
+			#first move .. last move + one slat
 			zs = sorted(c[1][2] for c in mc.find('move')[:n])
 			check('%-14s slats span exactly %g' % (lbl, l),
-				  round((zs[-1] + z / 2.0) - (zs[0] - z / 2.0), 6), l)
-			check('%-14s centred on Z' % lbl, round(zs[0] + zs[-1], 6), 0.0)
+				  round((zs[-1] + z) - zs[0], 6), l)
+			check('%-14s run is centred on Z' % lbl,
+				  round(zs[0] + zs[-1] + z, 6), 0.0)
 
-		check('slats are bevelled', bool(mc.find('polyBevel3')), True)
+		check('slat ends are chamfered', bool(mc.find('polyBevel3')), True)
 		mc.calls = []
 		g['wbGrate'](30.0, 50.0, bevel=0)
 		check('bevel 0 -> no polyBevel3', mc.find('polyBevel3'), [])
@@ -978,6 +984,54 @@ def main():
 				check('%s rejected' % why, False, True)
 			except ValueError:
 				check('%s rejected' % why, True, True)
+
+		print('\n[23] the slat cross-section - measured, not a box')
+		#sliced out of the source model: a cambered top, draughted sides, arc corners
+		#and two underside channels.  the earlier build used a bevelled cube, which is
+		#what "grates look terrible" was about.
+		for w in (15.0, 20.0, 25.0, 30.0):
+			pr = g['_wbSlatProfile'](w)
+			xs = [q[0] for q in pr]
+			check('%gcm profile spans exactly %g' % (w, w), round(max(xs) - min(xs), 6), w)
+			check('   it is a real section, not 4 corners', len(pr) > 40, True)
+		#the edge detail is fixed: identical at both edges and unchanged by width
+		for w in (15.0, 30.0):
+			pr = g['_wbSlatProfile'](w)
+			half = w / 2.0
+			left = [(round(q[0] + half, 4), q[1]) for q in pr[:len(g['WB_SLAT_END'])]]
+			check('%gcm left edge is the measured detail' % w,
+				  left, [(round(dx, 4), y) for dx, y in g['WB_SLAT_END']])
+		pr = g['_wbSlatProfile'](25.0)
+		mirrored = sorted((round(-x, 3), round(y, 4)) for x, y in pr)
+		check('the section is symmetric',
+			  mirrored == sorted((round(x, 3), round(y, 4)) for x, y in pr), True)
+		#the top really is an arc of the measured radius
+		top = [q for q in pr if q[1] >= g['WB_SLAT_TOP'] - 1e-9]
+		_cx, _cy, r, dev = fitcirc(top)
+		check('top is a %g camber' % g['WB_SLAT_CAMBER'], round(r, 1), 137.8)
+		check('   and a true arc', dev < 1e-6, True)
+		check('   crowned upward', round(_cy, 1) < 0, True)
+		#the measured slat is 24.99 wide and 2.5158 tall; reproduce that
+		m = g['_wbSlatProfile'](24.99)
+		check('at the model width the top matches to 0.005',
+			  abs(max(q[1] for q in m) - 2.5158) < 0.006, True)
+		check('   and the underside matches exactly',
+			  round(min(q[1] for q in m), 4), g['WB_SLAT_BOT'])
+		#the sides lean in, they are not vertical
+		lo = min(pr, key=lambda q: q[1] if q[0] < 0 else 99)
+		check('the side draughts inward',
+			  round(g['WB_SLAT_END'][-1][0] - g['WB_SLAT_END'][2][0], 4) > 0.5, True)
+		#two underside channels, dropped when a slat gets too narrow for them
+		u = g['_wbSlatUnder'](12.495)
+		check('underside is monotonic in X',
+			  all(u[i][0] > u[i + 1][0] for i in range(len(u) - 1)), True)
+		check('   with two channels', sum(1 for q in u if abs(q[1] - (g['WB_SLAT_BOT'] + g['WB_SLAT_CH_D'])) < 1e-9), 4)
+		for bad, why in ((1.0, 'narrower than its own edge detail'), (400.0, 'wider than the camber radius')):
+			try:
+				g['_wbSlatProfile'](bad)
+				check('%g rejected (%s)' % (bad, why), False, True)
+			except ValueError:
+				check('%g rejected (%s)' % (bad, why), True, True)
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)

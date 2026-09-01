@@ -12,6 +12,7 @@
 #Shift+Alt+1 opens the panel.  Alt+1/2/3 are already taken in the user's Maya, so
 #those are deliberately left alone.
 
+import math
 import os
 import re
 
@@ -172,7 +173,27 @@ WB_GRATE_INSET = 2.495   #hardware column inset from each end of a slat
 WB_GRATE_COLPITCH = 10.0 #nominal spacing between hardware columns
 WB_GRATE_ROD = 0.404     #rod diameter
 WB_GRATE_RODY = 1.30     #rod height above the floor
-WB_GRATE_BEVEL = 0.08    #chamfer on the slat edges
+WB_GRATE_BEVEL = 0.08    #chamfer on the slat ends, where the sweep is cut
+
+#the slat cross-section, sliced out of the source model.  it is NOT a box: the top is a
+#shallow camber, the sides draught inward, the top corners are arcs and the underside
+#carries two channels.  the edge detail below is measured as (inset from the edge, Y) and
+#never changes with width - same idea as a coping nose - while the camber and the
+#underside span whatever width is asked for.
+WB_SLAT_END = [
+	(0.0152, 0.0), (0.0076, 0.0097), (0.0, 0.0194),
+	(0.1226, 0.5097), (0.2452, 1.0), (0.4013, 1.4153), (0.5574, 1.8306),
+	(0.5848, 1.8756), (0.6122, 1.9207), (0.6559, 1.9535), (0.6997, 1.9863),
+	(0.7506, 2.0), (0.8015, 2.0138),
+]
+WB_SLAT_CAMBER = 137.81   #top camber radius; rise 0.502 across the 24.99 model
+WB_SLAT_TOP = 2.0138      #Y where the corner arc hands over to the camber
+WB_SLAT_BOT = -0.0197     #underside, between the channels
+WB_SLAT_SEG = 16          #segments the camber is drawn with
+WB_SLAT_CH_OFF = 0.4891   #channel centres as a fraction of the half width (6.111/12.495)
+WB_SLAT_CH_W = 1.398
+WB_SLAT_CH_D = 0.312
+WB_SLAT_CH_RAMP = 2.36
 
 #model sections: (settings key, panel label).  drop model files into a section's
 #folder and hit Refresh - one button appears per file, no code change needed.
@@ -597,6 +618,54 @@ def wbCopingCustom():
 #  grates - a slat array.  NOT a swept profile like the copings
 ##############################################################################
 
+def _wbSlatUnder(half):
+	#the underside, right to left: a channel either side of centre with a long ramp
+	#into each.  breakpoints that a narrow slat has squeezed past are dropped, so the
+	#run stays monotonic in X instead of folding back on itself.
+	b, dpt = WB_SLAT_BOT, WB_SLAT_BOT + WB_SLAT_CH_D
+	off = WB_SLAT_CH_OFF * half
+	w, r = WB_SLAT_CH_W / 2.0, WB_SLAT_CH_RAMP
+	edge = half - WB_SLAT_END[0][0]
+	pts = [(edge, 0.0)]
+	for c in (off, -off):
+		pts += [(c + w + r, b), (c + w, dpt), (c - w, dpt), (c - w - r, b)]
+	pts.append((-edge, 0.0))
+	out = []
+	for p in pts:
+		if not out or p[0] < out[-1][0] - 1e-6:
+			out.append(p)
+	return out
+def _wbSlatProfile(width, seg=WB_SLAT_SEG):
+	#the whole cross-section: up the left edge, across the camber, down the right edge,
+	#back along the underside.  pure maths, no Maya.
+	half = float(width) / 2.0
+	inset = WB_SLAT_END[-1][0]
+	if half <= inset + 0.5:
+		raise ValueError('grate slat is too narrow to carry its edge profile.')
+	pts = [(-half + dx, y) for dx, y in WB_SLAT_END]
+	hs = half - inset
+	R = WB_SLAT_CAMBER
+	if R <= hs:
+		raise ValueError('grate slat is too wide for its camber radius.')
+	base = math.sqrt(R * R - hs * hs)
+	for i in range(1, int(seg)):
+		x = -hs + 2.0 * hs * i / float(seg)
+		pts.append((x, WB_SLAT_TOP + math.sqrt(max(R * R - x * x, 0.0)) - base))
+	pts += [(half - dx, y) for dx, y in reversed(WB_SLAT_END)]
+	pts += _wbSlatUnder(half)
+	return pts
+def _wbBuildSlat(profile, length, name):
+	#one slat, swept along Z exactly the way a coping is
+	pts = [(x, y, 0.0) for x, y in _wbCCW(profile)]
+	s = mc.polyCreateFacet(p=pts, name=name)[0]
+	mc.polyExtrudeFacet(s + '.f[0]', constructionHistory=True, keepFacesTogether=True,
+						localTranslateZ=float(length))
+	mc.delete(s, constructionHistory=True)
+	try:
+		mc.polyCloseBorder(s, constructionHistory=False)
+	except Exception:
+		pass
+	return s
 def _wbGrateSlats(length, slat=WB_GRATE_SLAT, gap=WB_GRATE_GAP):
 	#how many slats fit in 'length', and how long each has to be for the run to come
 	#out at exactly that.  the gap is the drainage slot and is held constant across
@@ -630,16 +699,18 @@ def _wbBuildGrate(width, length, name, offset_x, bevel=WB_GRATE_BEVEL):
 	#stone character has to come from the texture.
 	width, length, bevel = float(width), float(length), float(bevel)
 	n, sz = _wbGrateSlats(length)
+	prof = _wbSlatProfile(width)
 	parts = []
 	for i in range(n):
-		s = mc.polyCube(w=width, h=WB_GRATE_THICK, d=sz, name='%s_slat%02d' % (name, i + 1))[0]
+		s = _wbBuildSlat(prof, sz, '%s_slat%02d' % (name, i + 1))
 		if bevel > 0:
-			mc.polyBevel3(mc.ls(s + '.e[*]', flatten=True), offset=bevel, offsetAsFraction=False,
-						  segments=1, depth=1, worldSpace=True, autoFit=True,
-						  mergeVertices=True, smoothingAngle=30)
-			mc.delete(s, constructionHistory=True)
-		mc.move(0.0, WB_GRATE_Y0 + WB_GRATE_THICK / 2.0,
-				-length / 2.0 + i * (sz + WB_GRATE_GAP) + sz / 2.0, s)
+			#chamfer where the sweep was cut, exactly as the copings do
+			edges = _wbCapEdges(s, sz)
+			if edges:
+				mc.polyBevel3(edges, offset=bevel, offsetAsFraction=True, segments=1, depth=1,
+							  worldSpace=True, autoFit=True, mergeVertices=True, smoothingAngle=30)
+				mc.delete(s, constructionHistory=True)
+		mc.move(0.0, 0.0, -length / 2.0 + i * (sz + WB_GRATE_GAP), s)
 		parts.append(s)
 	for j, cx in enumerate(_wbGrateCols(width)):
 		r = mc.polyCylinder(r=WB_GRATE_ROD / 2.0, h=length, axis=(0, 0, 1),

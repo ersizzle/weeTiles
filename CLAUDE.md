@@ -253,13 +253,23 @@ Regions in file order, marked with banner comments:
    lays a row of slats down Z with a fixed drainage slot, runs a rod through each
    hardware column, merges the lot and gives it the same top-projection UVs as the
    copings. `wbGrate` is the entry point; presets in `WB_GRATES`.
-   - **This is an assembly, not a swept profile — the coping approach does not apply.**
-     `tile_models/grates/flex_grate_30_50` has no clean sweep axis on any primitive: its
-     slat tops scatter up to **3.08°** off +Y, a sculpted “natural” relief no
-     cross-section can express (it is also why the model's bbox is 24.9903, not 25).
-     So the constants here are the **design** it is built from, not a measured profile,
-     and the slats are clean bevelled boxes relying on texture for stone character.
-     The source is 16,552 triangles; a rebuild is far lighter.
+   - It is an **assembly of swept slats**. A first pass concluded “no sweep axis” and
+     built bevelled cubes — that was wrong and looked it. The test used a 1e-3 normal
+     threshold, which a 17° draught and a shallow camber blow straight past. **Slice
+     the mesh before concluding a shape is simple.**
+   - `WB_SLAT_END` is the slat's edge detail **measured by slicing one slat**: bottom
+     chamfer, a side draughting **17.11°** inward, then an **R0.2905** corner arc onto
+     the top. It is fixed — width never changes it, exactly like a coping nose.
+     `_wbSlatProfile` joins the two edges with an **R137.81** camber arc (a true arc,
+     not a parabola: circle dev 0.008 against parabola 0.029) and closes the section
+     with `_wbSlatUnder`, two channels 1.398 × 0.312 with 2.36 ramps.
+   - **The camber radius is held, so the crown grows with width**: 0.163 at 15cm, 0.497
+     at 25 (the model measures 0.502), 0.733 at 30. That follows the shared-radius
+     pattern the coping bullnoses showed. If the real product holds the *rise* instead,
+     this is the constant to change.
+   - Slats are swept with the same calls as a coping — `polyCreateFacet` →
+     `polyExtrudeFacet` → `polyCloseBorder` → `_wbCapEdges` + `polyBevel3` — so
+     `_wbCCW` orients each one and the stored winding does not matter.
    - What the model actually is, and where the numbers come from: **10 identical slats**
      at pitch exactly **5.100** (4.200 long + **0.900** slot), 24.990 wide, 2.532 tall,
      plus hardware in 3 columns at X −16.831 / −6.831 / +3.169 — spaced exactly **10.0**,

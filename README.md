@@ -279,11 +279,19 @@ round.)
 
 Named `grate_flex_<size>_<nn>_geo`.
 
-Unlike the copings, this is **not** an exact rebuild of the source model. That model is
-an assembly rather than a swept profile, and its slat tops carry a sculpted relief —
-faces up to 3° off flat — that no cross-section can reproduce. The slats here are clean
-bevelled boxes, so the stone character has to come from the texture. In exchange it is a
-fraction of the source's 16,552 triangles.
+The slats are not boxes. Their cross-section is measured off the source model and swept
+the same way a coping is:
+
+| | |
+| --- | --- |
+| Top | a shallow **R137.8** camber, so it crowns rather than sitting flat |
+| Sides | draught **17.1°** inward |
+| Top corners | **R0.29** arcs |
+| Underside | two channels, 1.4 wide × 0.31 deep |
+| Ends | chamfered where the sweep is cut |
+
+The camber radius is held across sizes, so the crown grows with width — 0.16cm at 15,
+0.50 at 25 (matching the model), 0.73 at 30.
 
 ## Grate and Coping models
 
