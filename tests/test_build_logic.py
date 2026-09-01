@@ -1160,14 +1160,20 @@ def main():
 		mc.calls = []
 		g['wbMono'](25.0, 65.0)
 		slabs = [c for c in mc.find('polyCube') if c[2]['name'].endswith('_slab')]
-		cutters = [c for c in mc.find('polyCube') if '_slot' in c[2]['name']]
+		cutters = [c for c in mc.find('polyCreateFacet') if '_slot' in c[2]['name']]
 		check('exactly one slab box', len(slabs), 1)
 		check('   the full slab, uncut', (slabs[0][2]['w'], slabs[0][2]['d']), (25.0, 65.0))
 		check('one cutter per slot', len(cutters), 11)
-		check('   each the slot size', (cutters[0][2]['w'], cutters[0][2]['d']),
+		cp = cutters[0][2]['p']
+		cxs = [q[0] for q in cp]
+		czs = [q[2] for q in cp]
+		check('   each the slot size',
+			  (round(max(cxs) - min(cxs), 4), round(max(czs) - min(czs), 4)),
 			  (g['WB_MONO_SLOT_W'], g['WB_MONO_SLOT_L']))
-		check('   and taller than the slab, so the cut goes through',
-			  cutters[0][2]['h'] > g['WB_MONO_H'], True)
+		check('   swept through the slab and out the other side',
+			  mc.find('polyExtrudeFacet')[-1][2]['localTranslateZ'] > g['WB_MONO_H'], True)
+		check('   starting below the slab',
+			  round(cp[0][1], 4) < g['WB_MONO_Y'], True)
 		bools = mc.find('polyCBoolOp')
 		check('one boolean, not eighteen boxes', len(bools), 1)
 		check('   and it is a difference', bools[0][2]['op'], 2)
@@ -1182,7 +1188,7 @@ def main():
 			check('%-14s one slab, %g wide' % (lbl, w), (len(slab), slab[0][2]['w']), (1, w))
 			check('%-14s slab is %g thick' % (lbl, g['WB_MONO_H']), slab[0][2]['h'], g['WB_MONO_H'])
 			check('%-14s %d slots cut' % (lbl, len(g['_wbMonoSlots'](w, l))),
-				  len([c for c in mc.find('polyCube') if '_slot' in c[2]['name']]),
+				  len([c for c in mc.find('polyCreateFacet') if '_slot' in c[2]['name']]),
 				  len(g['_wbMonoSlots'](w, l)))
 			check('%-14s named for its size' % lbl,
 				  made[0].startswith('grate_mono_%s_' % g['_wbSafe']('%gx%g' % (w, l), fragment=True)), True)
@@ -1230,6 +1236,43 @@ def main():
 			  [c for c in mc.find('polyBevel3') if c[2]['offset'] == g['WB_MONO_BEVEL']], [])
 		check('   but the slab is still rounded',
 			  len([c for c in mc.find('polyBevel3') if c[2]['offset'] == g['WB_MONO_ROUND']]), 1)
+
+		print('\n[27] the slots are stadiums, not rectangles')
+		#one slot's outline measures 17.4720 in area; a rectangle of the same bbox would
+		#be 18.0000 and a true stadium 17.5171, so the ends are round
+		st = g['_wbStadium'](1.5, 12.0)
+		xs = [q[0] for q in st]
+		zs = [q[1] for q in st]
+		n = len(st)
+		a = abs(sum(st[i][0] * st[(i + 1) % n][1] - st[(i + 1) % n][0] * st[i][1]
+					for i in range(n)) / 2.0)
+		check('bbox is still the slot size',
+			  (round(max(xs) - min(xs), 4), round(max(zs) - min(zs), 4)), (1.5, 12.0))
+		check('area is the stadium, not the rectangle', abs(a - 17.5171) < abs(a - 18.0), True)
+		check('   and within 0.03 of a true stadium', abs(a - 17.5171) < 0.03, True)
+		check('the ends are round, not square',
+			  len([q for q in st if abs(abs(q[0]) - 0.75) > 1e-9]) > 0, True)
+		#every point on a cap must sit on the cap circle
+		import math as _m
+		r, h = 0.75, 12.0 / 2.0 - 0.75
+		off = max(abs(_m.hypot(q[0], abs(q[1]) - h) - r) for q in st if abs(q[1]) > h + 1e-9)
+		check('cap points sit on the r=0.75 circle', off < 1e-9, True)
+		check('straight sides run the full %g' % (2 * h),
+			  round(max(q[1] for q in st if abs(abs(q[0]) - 0.75) < 1e-9) -
+					min(q[1] for q in st if abs(abs(q[0]) - 0.75) < 1e-9), 4), round(2 * h, 4))
+		#the facet has to face +Y or the swept cutter is inside out
+		up = g['_wbFacetUp'](st)
+		sa = sum(up[i][0] * up[(i + 1) % n][1] - up[(i + 1) % n][0] * up[i][1]
+				 for i in range(n)) / 2.0
+		check('oriented for a +Y facet normal', sa < 0, True)
+		check('   and _wbFacetUp keeps the same points', sorted(up), sorted(st))
+		check('   it flips a loop that runs the other way',
+			  g['_wbFacetUp'](list(reversed(st))), up)
+		try:
+			g['_wbStadium'](12.0, 1.5)
+			check('longer-than-wide is enforced', False, True)
+		except ValueError:
+			check('longer-than-wide is enforced', True, True)
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)

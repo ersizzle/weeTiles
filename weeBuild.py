@@ -226,6 +226,7 @@ WB_MONO_BEVEL = 0.06     #the frame's edge rounding
 #this is applied before the slots are cut.
 WB_MONO_ROUND = 0.116
 WB_MONO_ROUND_SEG = 4
+WB_MONO_SLOT_SEG = 12    #segments in each semicircular slot end
 
 #the slat cross-section, sliced out of the source model.  it is NOT a box: the top is a
 #shallow camber, the sides draught inward, the top corners are arcs and the underside
@@ -725,6 +726,45 @@ def _wbBuildSlat(profile, length, name):
 	except Exception:
 		pass
 	return s
+def _wbStadium(width, length, seg=WB_MONO_SLOT_SEG):
+	#a stadium outline in (x, z): straight sides with a semicircular cap at each end.
+	#the model's slots are this shape, not rectangles - one measures 17.4720 in area
+	#against 18.0000 for a rectangle and 17.5171 for a true stadium.
+	r = float(width) / 2.0
+	h = float(length) / 2.0 - r
+	if r <= 0 or h < 0:
+		raise ValueError('a slot must be at least as long as it is wide.')
+	seg = max(2, int(seg))
+	pts = [(r, -h), (r, h)]
+	for i in range(1, seg):
+		a = math.pi * i / float(seg)
+		pts.append((r * math.cos(a), h + r * math.sin(a)))
+	pts += [(-r, h), (-r, -h)]
+	for i in range(1, seg):
+		a = math.pi * (1.0 + i / float(seg))
+		pts.append((r * math.cos(a), -h + r * math.sin(a)))
+	return pts
+def _wbFacetUp(pts):
+	#order an (x, z) loop so polyCreateFacet gives it a +Y normal.  a loop running
+	#counter clockwise in (x, z) faces -Y, so that one gets reversed.
+	n = len(pts)
+	a = sum(pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1]
+			for i in range(n)) / 2.0
+	return list(pts) if a < 0 else list(reversed(pts))
+def _wbSlotCutter(cx, cz, name):
+	#one slot cutter: the stadium profile swept up through the slab.  it starts below the
+	#slab and runs well past the top, so the cut goes clean through both faces.
+	prof = _wbFacetUp(_wbStadium(WB_MONO_SLOT_W, WB_MONO_SLOT_L))
+	y0 = WB_MONO_Y - WB_MONO_H
+	c = mc.polyCreateFacet(p=[(cx + x, y0, cz + z) for x, z in prof], name=name)[0]
+	mc.polyExtrudeFacet(c + '.f[0]', constructionHistory=True, keepFacesTogether=True,
+						localTranslateZ=WB_MONO_H * 3.0)
+	mc.delete(c, constructionHistory=True)
+	try:
+		mc.polyCloseBorder(c, constructionHistory=False)
+	except Exception:
+		pass
+	return c
 def _wbBool(a, b, op, name):
 	#Maya has had two boolean entry points; use the cmds one and fall back to the MEL
 	#action weeScript has always driven.  op: 1 union, 2 difference, 3 intersection.
@@ -786,13 +826,10 @@ def _wbBuildMono(width, length, name, offset_x, bevel=WB_MONO_BEVEL):
 					  offsetAsFraction=False, segments=int(WB_MONO_ROUND_SEG), depth=1,
 					  worldSpace=True, autoFit=True, mergeVertices=True, smoothingAngle=30)
 		mc.delete(slab, constructionHistory=True)
-	cutters = []
-	for i, (cx, cz) in enumerate(_wbMonoSlots(width, length)):
-		#taller than the slab so the cut goes clean through both faces
-		c = mc.polyCube(w=WB_MONO_SLOT_W, h=WB_MONO_H * 3.0, d=WB_MONO_SLOT_L,
-						name='%s_slot%02d' % (name, i + 1))[0]
-		mc.move(cx, WB_MONO_Y + WB_MONO_H / 2.0, cz, c)
-		cutters.append(c)
+	#the slots are stadiums - straight sides with a semicircular cap at each end - so
+	#the cutter is that profile swept up, not a box
+	cutters = [_wbSlotCutter(cx, cz, '%s_slot%02d' % (name, i + 1))
+			   for i, (cx, cz) in enumerate(_wbMonoSlots(width, length))]
 	if cutters:
 		cut = cutters[0]
 		if len(cutters) > 1:

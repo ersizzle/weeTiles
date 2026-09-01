@@ -302,8 +302,8 @@ sits midway between them, chosen by eye rather than measured.
 
 Two kinds, both in the Grates section.
 
-**Mono 25 x 65** and **Mono 30 x 65** are the slotted ones: a slab with **11 slots of
-1.5 x 12**, in three columns with the middle column staggered half a pitch against the
+**Mono 25 x 65** and **Mono 30 x 65** are the slotted ones: a slab with **11 stadium
+slots of 1.5 x 12** — straight sided with a semicircular cap at each end —, in three columns with the middle column staggered half a pitch against the
 outer two, and a 4cm solid margin all round. The slots are cut with a boolean, so the
 slab is a single clean shell rather than a set of pieces butted together.
 

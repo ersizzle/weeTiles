@@ -312,9 +312,18 @@ Regions in file order, marked with banner comments:
      `polyPerformBooleanAction` that weeScript's `_wtTrim` has always driven. Cutters
      are made 3× the slab height so the cut passes cleanly through both faces, and are
      united into one before the single difference.
+   - **The slots are stadiums, not rectangles** — straight sides with a semicircular
+     cap at each end. One slot's outline measures **17.4720** in area; the same bbox as
+     a rectangle would be 18.0000 and a true stadium 17.5171. `_wbStadium` builds the
+     profile (`WB_MONO_SLOT_SEG` = 12 per cap) and `_wbSlotCutter` sweeps it up through
+     the slab. **Bounding boxes are not shapes** — a first pass read 1.5 × 12 off the
+     bbox and cut square-ended slots, which is not what the model has.
+   - `_wbFacetUp` orders the (x, z) loop so `polyCreateFacet` gives it a **+Y** normal;
+     a loop running CCW in (x, z) faces −Y and the swept cutter comes out inside out.
+     Note this is the opposite convention to `_wbCCW`, which works in (x, y).
    - The slot walls are **vertical and unchamfered** — sliced through a slot, both
      walls run straight from Y 0.8 to 2.4 exactly 1.500 apart, and every vertex at the
-     slot mouth sits exactly on Y 2.4. A plain box cutter is right; no draft, no fillet.
+     slot mouth sits exactly on Y 2.4. No draft, no fillet on the cutter.
    - **But the slab's twelve outer edges are ROUNDED**, `WB_MONO_ROUND` = **R0.116**
      over `WB_MONO_ROUND_SEG` = 4 segments — all four fillets fit that radius, in plan
      as well as in section. A first pass used a 1-segment 0.06 chamfer and the user
