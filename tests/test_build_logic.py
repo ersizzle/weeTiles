@@ -124,6 +124,11 @@ class StubMC(object):
 			return [float(v.split('|x')[1]), 0.0, 0.0]
 		m = re.search(r'\.f\[(\d+)\]', v)
 		return [0.0, float(m.group(1)) if m else 0.0, 0.0]
+	def polyCylinder(self, **kw):
+		nm = kw.get('name') or kw.get('n') or 'pCylinder'
+		self._rec('polyCylinder', **kw)
+		self.objects.add(nm)
+		return [nm, 'polyCylinder1']
 	def polyCreateFacet(self, **kw):
 		nm = kw.get('name') or kw.get('n') or 'pFacet'
 		self._rec('polyCreateFacet', **kw)
@@ -471,7 +476,10 @@ def main():
 		check('four coping presets', len(g['WB_COPINGS']), 4)
 		check('all three profiles offered',
 			  sorted(set(c[1] for c in g['WB_COPINGS'])), ['channel', 'flat', 'overflow'])
-		check('a Custom button for tiles and for copings', labels.count('Custom size...'), 2)
+		check('a Custom button for tiles, copings and grates',
+			  labels.count('Custom size...'), 3)
+		check('a button per grate preset',
+			  sum(1 for l in labels if l in [q[0] for q in g['WB_GRATES']]), len(g['WB_GRATES']))
 		check('ribs checkbox', [c[2].get('label') for c in mc.find('checkBox')], ['underside ribs'])
 
 		print('\n[12] coping profile maths - no Maya in here')
@@ -911,6 +919,65 @@ def main():
 			  made[0].startswith('coping_overflow_33x66_'), True)
 		check('   swept 66 along Z',
 			  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], 66.0)
+
+		print('\n[22] flex grates - an assembly, not a swept profile')
+		check('four presets', [g[0] for g in g['WB_GRATES']],
+			  ['Flex 15 x 50', 'Flex 20 x 50', 'Flex 25 x 50', 'Flex 30 x 50'])
+		#the drainage slot is held at 0.9 and the slat absorbs the rounding, so the run
+		#comes out exact - the source model's 10 x 4.2 + 9 x 0.9 is 50.1, not 50
+		for L, n, z in ((50.0, 10, 4.19), (25.0, 5, 4.28), (100.0, 20, 4.145)):
+			gn, gz = g['_wbGrateSlats'](L)
+			check('%gcm -> %d slats of %g' % (L, n, z), (gn, round(gz, 4)), (n, z))
+			check('   run is exactly %g' % L,
+				  round(gn * gz + (gn - 1) * g['WB_GRATE_GAP'], 6), L)
+		#a column each time the span grows past another pitch
+		for w, want in ((15.0, 2), (20.0, 3), (25.0, 3), (30.0, 4)):
+			check('%gcm wide -> %d hardware columns' % (w, want), len(g['_wbGrateCols'](w)), want)
+		#fed the source model's own width - 24.990, not a round 25 - the rule has to
+		#give back the model's own layout: three columns exactly 10.0 apart
+		cols = g['_wbGrateCols'](24.99)
+		check('the model width reproduces the model layout',
+			  [round(c, 3) for c in cols], [-10.0, 0.0, 10.0])
+		check('   inset 2.495 from each end',
+			  round(24.99 / 2.0 + cols[0], 3), g['WB_GRATE_INSET'])
+		check('   a round 25 shifts them by only 0.005',
+			  round(g['_wbGrateCols'](25.0)[0], 4), -10.005)
+		check('columns stay symmetric',
+			  [round(a + b, 6) for a, b in zip(g['_wbGrateCols'](30.0),
+											   reversed(g['_wbGrateCols'](30.0)))], [0.0] * 4)
+
+		print('   every preset button builds the size on its label')
+		g['wbUI']()
+		for lbl, w, l in g['WB_GRATES']:
+			mc.calls = []
+			made = g['_wbGrateBtn'](w, l)
+			cubes = mc.find('polyCube')
+			rods = mc.find('polyCylinder')
+			n, z = g['_wbGrateSlats'](l)
+			check('%-14s %d slats' % (lbl, n), len(cubes), n)
+			check('%-14s slat %g wide' % (lbl, w), cubes[0][2]['w'], w)
+			check('%-14s %d rods' % (lbl, len(g['_wbGrateCols'](w))),
+				  len(rods), len(g['_wbGrateCols'](w)))
+			check('%-14s rods run the full length' % lbl, rods[0][2]['h'], l)
+			check('%-14s named for its size' % lbl,
+				  made[0].startswith('grate_flex_%s_' % g['_wbSafe']('%gx%g' % (w, l), fragment=True)), True)
+			#the slats must fill the run exactly, centred on the origin
+			zs = sorted(c[1][2] for c in mc.find('move')[:n])
+			check('%-14s slats span exactly %g' % (lbl, l),
+				  round((zs[-1] + z / 2.0) - (zs[0] - z / 2.0), 6), l)
+			check('%-14s centred on Z' % lbl, round(zs[0] + zs[-1], 6), 0.0)
+
+		check('slats are bevelled', bool(mc.find('polyBevel3')), True)
+		mc.calls = []
+		g['wbGrate'](30.0, 50.0, bevel=0)
+		check('bevel 0 -> no polyBevel3', mc.find('polyBevel3'), [])
+		for kw, why in (({'count': 0}, 'zero count'), ({'width': 0}, 'zero width'),
+						({'length': 0}, 'zero length'), ({'bevel': 5.0}, 'bevel past half the slat')):
+			try:
+				g['wbGrate'](**kw)
+				check('%s rejected' % why, False, True)
+			except ValueError:
+				check('%s rejected' % why, True, True)
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)

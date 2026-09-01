@@ -259,7 +259,33 @@ projection puts them, since they are never seen.
 More profiles are one record in `WB_COPING_PROFILES` plus one line in `WB_COPINGS` — no
 other code changes.
 
-## Grates and Coping models
+## Grates
+
+Built procedurally. **Flex 15 x 50**, **20 x 50**, **25 x 50**, **30 x 50**, plus
+**Custom size…**, with Count and Bevel fields.
+
+A grate is a row of slats with a drainage slot between them, and a rod through each
+hardware column running the full length:
+
+| | |
+| --- | --- |
+| Slot | 0.9cm, held constant at every size |
+| Slat | 2.532 thick; its length takes up the rounding so the run is exact |
+| Columns | 2 at 15cm wide, 3 at 20 and 25, 4 at 30 |
+
+A 50cm run is 10 slats of 4.19 — exactly 50. (The source model's 10 × 4.2 + 9 × 0.9
+comes to 50.1; holding the slot and flexing the slat is what makes the size come out
+round.)
+
+Named `grate_flex_<size>_<nn>_geo`.
+
+Unlike the copings, this is **not** an exact rebuild of the source model. That model is
+an assembly rather than a swept profile, and its slat tops carry a sculpted relief —
+faces up to 3° off flat — that no cross-section can reproduce. The slats here are clean
+bevelled boxes, so the stone character has to come from the texture. In exchange it is a
+fraction of the source's 16,552 triangles.
+
+## Grate and Coping models
 
 These import model files rather than building them. Point a section at a folder with
 the **…** button (remembered per Maya user), and you get one button per model file in

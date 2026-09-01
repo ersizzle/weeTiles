@@ -153,9 +153,30 @@ WB_COPING_BEVEL = 0.03
 #projection), 2.18 gives the bullnose the share it would have if it were laid flat.
 WB_COPING_RELAX = 2.0
 
+#flex grate presets: (label, width cm, length cm).  the source model is
+#tile_models/grates/flex_grate_30_50 - an assembly of identical slats, not a swept
+#profile, so unlike the copings these constants are the design it is built from
+#rather than a measured cross-section.
+WB_GRATES = [
+	('Flex 15 x 50', 15.0, 50.0),
+	('Flex 20 x 50', 20.0, 50.0),
+	('Flex 25 x 50', 25.0, 50.0),
+	('Flex 30 x 50', 30.0, 50.0),
+]
+WB_GRATE_SIZE = (30.0, 50.0)  #default, and what the source model is
+WB_GRATE_SLAT = 4.2      #nominal slat length along the run
+WB_GRATE_GAP = 0.9       #drainage slot between slats - fixed at every size
+WB_GRATE_THICK = 2.532   #slat height
+WB_GRATE_Y0 = -0.02      #slat underside, so it sits on the floor like the copings
+WB_GRATE_INSET = 2.495   #hardware column inset from each end of a slat
+WB_GRATE_COLPITCH = 10.0 #nominal spacing between hardware columns
+WB_GRATE_ROD = 0.404     #rod diameter
+WB_GRATE_RODY = 1.30     #rod height above the floor
+WB_GRATE_BEVEL = 0.08    #chamfer on the slat edges
+
 #model sections: (settings key, panel label).  drop model files into a section's
 #folder and hit Refresh - one button appears per file, no code change needed.
-WB_SECTIONS = [('grates', 'Grates'), ('copings', 'Coping models')]
+WB_SECTIONS = [('grates', 'Grate models'), ('copings', 'Coping models')]
 WB_EXT = ('.ma', '.mb', '.fbx', '.obj')
 WB_FTYPE = {'.ma': 'mayaAscii', '.mb': 'mayaBinary', '.fbx': 'FBX', '.obj': 'OBJ'}
 
@@ -573,6 +594,109 @@ def wbCopingCustom():
 	return _wbCopingBtn(kind, float(nums[0]), float(nums[1]))
 
 ##############################################################################
+#  grates - a slat array.  NOT a swept profile like the copings
+##############################################################################
+
+def _wbGrateSlats(length, slat=WB_GRATE_SLAT, gap=WB_GRATE_GAP):
+	#how many slats fit in 'length', and how long each has to be for the run to come
+	#out at exactly that.  the gap is the drainage slot and is held constant across
+	#every size, so the slat absorbs the rounding instead: the source model's
+	#10 x 4.2 + 9 x 0.9 comes to 50.1, this gives a true 50 with slats of 4.19.
+	slat, gap, length = float(slat), float(gap), float(length)
+	if length <= 0:
+		raise ValueError('grate length must be greater than 0.')
+	n = max(1, int(round((length + gap) / (slat + gap))))
+	z = (length - (n - 1) * gap) / n
+	if z <= 0:
+		raise ValueError('grate is too short to fit a slat.')
+	return n, z
+def _wbGrateCols(width, inset=WB_GRATE_INSET, pitch=WB_GRATE_COLPITCH):
+	#X positions of the hardware columns.  the outer two sit 'inset' in from each
+	#end and the rest spread evenly between them, gaining a column each time the
+	#span grows past another 'pitch'.  that reproduces the source model exactly at
+	#25 wide - three columns 10.0 apart - and gives four at 30.
+	width = float(width)
+	span = width - 2.0 * float(inset)
+	if span <= 0:
+		return [0.0]
+	n = max(2, int(round(span / float(pitch))) + 1)
+	return [-width / 2.0 + float(inset) + span * i / (n - 1) for i in range(n)]
+def _wbBuildGrate(width, length, name, offset_x, bevel=WB_GRATE_BEVEL):
+	#one grate: a row of slats down Z with a fixed drainage slot between them, then
+	#a rod through each hardware column running the whole length, all merged.
+	#unlike a coping this is an assembly, not a swept profile - the source model's
+	#slats carry a sculpted surface relief (faces up to 3 degrees off flat) that no
+	#cross-section can express, so the slats here are clean bevelled boxes and the
+	#stone character has to come from the texture.
+	width, length, bevel = float(width), float(length), float(bevel)
+	n, sz = _wbGrateSlats(length)
+	parts = []
+	for i in range(n):
+		s = mc.polyCube(w=width, h=WB_GRATE_THICK, d=sz, name='%s_slat%02d' % (name, i + 1))[0]
+		if bevel > 0:
+			mc.polyBevel3(mc.ls(s + '.e[*]', flatten=True), offset=bevel, offsetAsFraction=False,
+						  segments=1, depth=1, worldSpace=True, autoFit=True,
+						  mergeVertices=True, smoothingAngle=30)
+			mc.delete(s, constructionHistory=True)
+		mc.move(0.0, WB_GRATE_Y0 + WB_GRATE_THICK / 2.0,
+				-length / 2.0 + i * (sz + WB_GRATE_GAP) + sz / 2.0, s)
+		parts.append(s)
+	for j, cx in enumerate(_wbGrateCols(width)):
+		r = mc.polyCylinder(r=WB_GRATE_ROD / 2.0, h=length, axis=(0, 0, 1),
+							subdivisionsAxis=8, name='%s_rod%02d' % (name, j + 1))[0]
+		mc.move(cx, WB_GRATE_RODY, 0.0, r)
+		parts.append(r)
+	body = parts[0]
+	if len(parts) > 1:
+		body = mc.polyUnite(parts, constructionHistory=False, name=name)[0]
+	tf = mc.polyListComponentConversion(body, tf=True)
+	mc.polyProjection(tf, type='Planar', md='y')
+	mc.delete(body, constructionHistory=True)
+	#same rule as the copings: the shell fills 0-1 so the texture registers
+	_wbFitUV(body)
+	mc.move(offset_x, 0.0, 0.0, body, relative=True)
+	_wbBottomPivot(body)
+	return body
+def wbGrate(width=None, length=None, count=1, bevel=WB_GRATE_BEVEL, spacing=WB_SPACE):
+	#build 'count' flex grates in a row along X
+	width = float(WB_GRATE_SIZE[0] if width is None else width)
+	length = float(WB_GRATE_SIZE[1] if length is None else length)
+	count = int(count)
+	if width <= 0:
+		raise ValueError('grate width must be greater than 0.')
+	if count < 1:
+		raise ValueError('need at least 1 grate.')
+	bevel = float(bevel)
+	if bevel < 0 or bevel * 2.0 >= WB_GRATE_THICK:
+		raise ValueError('grate bevel must be between 0 and half the slat thickness.')
+	token = _wbSafe('%gx%g' % (width, length), fragment=True) or 'grate'
+	made = []
+	for i in range(count):
+		nm = _wbUnique('grate_flex_' + token + '_%02d_geo')
+		made.append(_wbBuildGrate(width, length, nm, i * (width + spacing), bevel))
+	mc.select(made)
+	n, sz = _wbGrateSlats(length)
+	print('weeBuild: built %d grate(s) at %g x %gcm, %d slats of %.3f: %s'
+		  % (count, width, length, n, sz, ', '.join(made)))
+	return made
+def _wbGrateBtn(width, length):
+	#a preset button builds the size written on it - never through _wbNum
+	return wbGrate(width, length, count=_wbNum('gcount', 1, integer=True),
+				   bevel=_wbNum('gbevel', WB_GRATE_BEVEL))
+def wbGrateCustom():
+	#any other width x length, typed in
+	r = mc.promptDialog(title='Custom grate', message='Width x Length in cm (e.g. 40x50):',
+						text='%gx%g' % (WB_GRATE_SIZE[0], WB_GRATE_SIZE[1]),
+						button=['OK', 'Cancel'], defaultButton='OK', cancelButton='Cancel',
+						dismissString='Cancel')
+	if r != 'OK':
+		return []
+	nums = re.findall(r'[\d.]+', (mc.promptDialog(q=True, text=True) or ''))
+	if len(nums) < 2:
+		raise ValueError('enter two numbers, e.g. 40x50.')
+	return _wbGrateBtn(float(nums[0]), float(nums[1]))
+
+##############################################################################
 #  models - grates, copings, and whatever gets added to WB_SECTIONS later
 ##############################################################################
 
@@ -762,6 +886,13 @@ def wbUI():
 					'build the %s coping profile at %g x %gcm' % (k, w, l))
 				   for lbl, k, w, l in WB_COPINGS[i:i + 2]])
 	_wbRow(f, [('Custom size...', wbCopingCustom, 'amber', 'build a coping at any width x length')])
+
+	f = mc.frameLayout(parent=main, label='  Grates', collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
+	_wbNums(f, [('gcount', 'Count', '1'), ('gbevel', 'Bevel', '%g' % WB_GRATE_BEVEL)])
+	for i in range(0, len(WB_GRATES), 2):
+		_wbRow(f, [(_wbWrap(lbl), (lambda _w=w, _l=l: _wbGrateBtn(_w, _l)), 'indigo',
+					'build a %g x %gcm flex grate' % (w, l)) for lbl, w, l in WB_GRATES[i:i + 2]])
+	_wbRow(f, [('Custom size...', wbGrateCustom, 'amber', 'build a grate at any width x length')])
 
 	for key, label in WB_SECTIONS:
 		f = mc.frameLayout(parent=main, label='  ' + label, collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])

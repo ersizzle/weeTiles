@@ -249,10 +249,35 @@ Regions in file order, marked with banner comments:
      `WB_COPINGS` — no other code changes. Measure `pts` off the model rather than
      transcribing: every wall triangle of a swept model is parallel to Z, so projecting
      that primitive to XY recovers the loop exactly.
-5. **models** — `_wbModelFiles`, `wbImport` (ported from weeTiles' `_wtImportOne`: diff
+5. **grates** — `_wbGrateSlats`/`_wbGrateCols` are **pure, no Maya**. `_wbBuildGrate`
+   lays a row of slats down Z with a fixed drainage slot, runs a rod through each
+   hardware column, merges the lot and gives it the same top-projection UVs as the
+   copings. `wbGrate` is the entry point; presets in `WB_GRATES`.
+   - **This is an assembly, not a swept profile — the coping approach does not apply.**
+     `tile_models/grates/flex_grate_30_50` has no clean sweep axis on any primitive: its
+     slat tops scatter up to **3.08°** off +Y, a sculpted “natural” relief no
+     cross-section can express (it is also why the model's bbox is 24.9903, not 25).
+     So the constants here are the **design** it is built from, not a measured profile,
+     and the slats are clean bevelled boxes relying on texture for stone character.
+     The source is 16,552 triangles; a rebuild is far lighter.
+   - What the model actually is, and where the numbers come from: **10 identical slats**
+     at pitch exactly **5.100** (4.200 long + **0.900** slot), 24.990 wide, 2.532 tall,
+     plus hardware in 3 columns at X −16.831 / −6.831 / +3.169 — spaced exactly **10.0**,
+     inset **2.495** from each slat end.
+   - `_wbGrateSlats` holds the **gap** at 0.9 and lets the slat length absorb the
+     rounding, because the slot is the functional feature. So a 50cm run is 10 slats of
+     4.19, exactly 50 — the model's own 10×4.2 + 9×0.9 comes to 50.1.
+   - `_wbGrateCols` gains a column each time the span passes another `WB_GRATE_COLPITCH`.
+     Fed the model's own 24.990 it returns the model's layout exactly (3 columns, 10.0
+     apart), and 30 gives 4 — which is what the user asked for.
+   - **The model is named `_30_50` but measures 24.990 wide.** The user confirmed it is
+     the 30 product, so `WB_GRATE_SIZE` is (30, 50). Note the model's own hardware
+     spacing is what this rule produces for **25**, so treat its width with suspicion
+     rather than as evidence.
+6. **models** — `_wbModelFiles`, `wbImport` (ported from weeTiles' `_wtImportOne`: diff
    `mc.ls(assemblies=True)`, keep roots containing a mesh, rename `<file>_geo`, drop
    pivot), `wbSetFolder`, `wbRefresh`.
-6. **UI** — `_wbRow`/`_wbNums`/`_wbCheck`/`_wbLabel`/`_wbFolderRow` (module level, not closures, so
+7. **UI** — `_wbRow`/`_wbNums`/`_wbCheck`/`_wbLabel`/`_wbFolderRow` (module level, not closures, so
    `_wbFillModels` can rebuild rows on Refresh), `_wbFillModels`, `wbUI`.
 
 ## Adding a section
