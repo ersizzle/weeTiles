@@ -294,10 +294,29 @@ Regions in file order, marked with banner comments:
      the 30 product, so `WB_GRATE_SIZE` is (30, 50). Note the model's own hardware
      spacing is what this rule produces for **25**, so treat its width with suspicion
      rather than as evidence.
-6. **models** — `_wbModelFiles`, `wbImport` (ported from weeTiles' `_wtImportOne`: diff
+6. **monoblock grates** — `_wbMonoRibs` is pure; `_wbBuildMono` stacks a slab on a
+   ladder frame from `polyCube`s and merges them. Presets in `WB_MONO`.
+   - **It has no slots, and that is correct.** The slab is solid — sliced at every height
+     it comes back as one loop of area exactly 1625 (25×65), and its section reduces to
+     **four points**, a plain sharp-edged box with no chamfer or camber. The water goes
+     **round** the block, down the gap the frame opens up, not through it. Don't
+     “fix” this by perforating the slab.
+   - That is why the frame is **bigger than the slab**: 27×66 against 25×65, standing
+     `WB_MONO_OVER_X` (1.0) proud each side and `WB_MONO_OVER_Z` (0.5) at each end.
+   - The frame is a ladder: two rails `WB_MONO_RAIL_W` (2.0) wide running the full length
+     with their outer face `WB_MONO_RAIL_IN` (1.35) in from the edge, plus cross ribs.
+     The **end pair are solid across; the ones between have a 5.0 gap down the middle**,
+     so each is built as two pieces. `_wbMonoRibs` gives five ribs exactly 16.0 apart at
+     65cm, matching the model.
+   - Preset sizes are the **slab**, not the frame — the model's slab is exactly 25×65, so
+     unlike the flex grate and the overflow coping there is no naming ambiguity here.
+   - Mapped by **ray-casting a grid**, not by walking boundary loops: loop-walking is
+     unreliable wherever a vertex is shared between loops, and it reported “0 holes” and
+     “1 boundary” on geometry that has plenty of both. Rasterise when the answer matters.
+7. **models** — `_wbModelFiles`, `wbImport` (ported from weeTiles' `_wtImportOne`: diff
    `mc.ls(assemblies=True)`, keep roots containing a mesh, rename `<file>_geo`, drop
    pivot), `wbSetFolder`, `wbRefresh`.
-7. **UI** — `_wbRow`/`_wbNums`/`_wbCheck`/`_wbLabel`/`_wbFolderRow` (module level, not closures, so
+8. **UI** — `_wbRow`/`_wbNums`/`_wbCheck`/`_wbLabel`/`_wbFolderRow` (module level, not closures, so
    `_wbFillModels` can rebuild rows on Refresh), `_wbFillModels`, `wbUI`.
 
 ## Adding a section

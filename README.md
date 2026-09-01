@@ -298,6 +298,24 @@ The connectors are **1.232** across, running 0.45 past the slats at each end. Th
 model has two concentric cylinders here — a 2.06 and a 0.404 core inside it — and this
 sits midway between them, chosen by eye rather than measured.
 
+## Monoblock grates
+
+**Mono 25 x 65** and **Mono 30 x 65**, in the same Grates section, with their own MonoBev
+field.
+
+This one has no slots, by design — the slab is solid and the water runs *around* it. That
+is why the frame underneath is bigger than the slab: it stands 1cm proud at each side and
+0.5 at each end, and the gap that opens up is the drain.
+
+| | |
+| --- | --- |
+| Slab | the size on the button, 1.6 thick, plain sharp-edged box |
+| Frame | 2cm wider, 1cm longer, 1.0 tall |
+| Frame structure | two 2cm rails down the length, plus cross ribs every 16cm |
+| Ribs | the end pair solid; the ones between split by a 5cm gap for the water |
+
+The button size is the **slab**. Named `grate_mono_<size>_<nn>_geo`.
+
 ## Grate and Coping models
 
 These import model files rather than building them. Point a section at a folder with

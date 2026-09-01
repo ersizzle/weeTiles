@@ -180,6 +180,28 @@ WB_GRATE_RODY = 1.301    #its axis height, measured
 WB_GRATE_ROD_OVER = 0.45 #how far it runs past the slats at each end, as the model does
 WB_GRATE_BEVEL = 0.08    #chamfer on the slat ends, where the sweep is cut
 
+#monoblock grate presets: (label, width cm, length cm).  measured off
+#tile_models/grates/monoblock_grate.  this one has NO slots through it: the slab is
+#solid and the water goes round the block, through the open ladder frame it stands on,
+#which is why the frame is wider than the slab.  the model's slab is exactly 25 x 65,
+#so the preset sizes are the slab and the frame comes out 2 wider and 1 longer.
+WB_MONO = [
+	('Mono 25 x 65', 25.0, 65.0),
+	('Mono 30 x 65', 30.0, 65.0),
+]
+WB_MONO_SIZE = (25.0, 65.0)  #default, and what the model measures
+WB_MONO_H = 1.6          #slab thickness
+WB_MONO_Y = 0.8          #slab underside, so it sits 0.2 into the frame
+WB_MONO_BASE_H = 1.0     #frame height
+WB_MONO_OVER_X = 1.0     #how far the frame stands proud of the slab, each side
+WB_MONO_OVER_Z = 0.5     #and at each end
+WB_MONO_RAIL_W = 2.0     #the two rails running the length of the frame
+WB_MONO_RAIL_IN = 1.35   #their outer face, in from the frame edge
+WB_MONO_RIB = 1.0        #cross rib thickness
+WB_MONO_RIB_PITCH = 16.0 #nominal spacing between ribs
+WB_MONO_RIB_GAP = 5.0    #the gap down the middle of the inner ribs
+WB_MONO_BEVEL = 0.06     #the frame's edge rounding, measured at 0.061
+
 #the slat cross-section, sliced out of the source model.  it is NOT a box: the top is a
 #shallow camber, the sides draught inward, the top corners are arcs and the underside
 #carries two channels.  the edge detail below is measured as (inset from the edge, Y) and
@@ -678,6 +700,94 @@ def _wbBuildSlat(profile, length, name):
 	except Exception:
 		pass
 	return s
+def _wbMonoRibs(length):
+	#Z centres of the cross ribs.  the outer pair sit one rib in from the base ends and
+	#the rest spread evenly between, keeping the pitch near WB_MONO_RIB_PITCH: five ribs
+	#at exactly 16.0 apart for the 65 the model was measured at.
+	ext = (float(length) + 2.0 * WB_MONO_OVER_Z) / 2.0 - WB_MONO_RIB
+	if ext <= 0:
+		return [0.0]
+	n = max(2, int(round(2.0 * ext / WB_MONO_RIB_PITCH)) + 1)
+	return [-ext + 2.0 * ext * i / (n - 1) for i in range(n)]
+def _wbBuildMono(width, length, name, offset_x, bevel=WB_MONO_BEVEL):
+	#a monoblock: a solid slab on a ladder frame.  no slots through it - the water goes
+	#round the block, not through it, which is why the frame is wider than the slab and
+	#is open between its ribs.
+	width, length, bevel = float(width), float(length), float(bevel)
+	bw = width + 2.0 * WB_MONO_OVER_X
+	bl = length + 2.0 * WB_MONO_OVER_Z
+	parts = []
+	#the slab.  the model's own section reduces to four points, so this really is a plain
+	#box - no chamfer, no camber, unlike the flex slat.
+	body = mc.polyCube(w=width, h=WB_MONO_H, d=length, name=name + '_slab')[0]
+	mc.move(0.0, WB_MONO_Y + WB_MONO_H / 2.0, 0.0, body)
+	parts.append(body)
+	#two rails down the full length of the frame
+	rx = bw / 2.0 - WB_MONO_RAIL_IN - WB_MONO_RAIL_W / 2.0
+	for i, x in enumerate((-rx, rx)):
+		r = mc.polyCube(w=WB_MONO_RAIL_W, h=WB_MONO_BASE_H, d=bl,
+						name='%s_rail%02d' % (name, i + 1))[0]
+		mc.move(x, WB_MONO_BASE_H / 2.0, 0.0, r)
+		parts.append(r)
+	#cross ribs.  the end pair run the full width; the ones between have a gap down the
+	#middle for the water, so each is built as two pieces
+	zs = _wbMonoRibs(length)
+	for i, z in enumerate(zs):
+		if i in (0, len(zs) - 1):
+			b = mc.polyCube(w=bw, h=WB_MONO_BASE_H, d=WB_MONO_RIB,
+							name='%s_rib%02d' % (name, i + 1))[0]
+			mc.move(0.0, WB_MONO_BASE_H / 2.0, z, b)
+			parts.append(b)
+			continue
+		hw = (bw - WB_MONO_RIB_GAP) / 2.0
+		if hw <= 0:
+			continue
+		for s in (-1.0, 1.0):
+			b = mc.polyCube(w=hw, h=WB_MONO_BASE_H, d=WB_MONO_RIB,
+							name='%s_rib%02d%s' % (name, i + 1, 'lr'[s > 0]))[0]
+			mc.move(s * (WB_MONO_RIB_GAP + hw) / 2.0, WB_MONO_BASE_H / 2.0, z, b)
+			parts.append(b)
+	if bevel > 0:
+		for q in parts:
+			mc.polyBevel3(mc.ls(q + '.e[*]', flatten=True), offset=bevel,
+						  offsetAsFraction=False, segments=1, depth=1, worldSpace=True,
+						  autoFit=True, mergeVertices=True, smoothingAngle=30)
+			mc.delete(q, constructionHistory=True)
+	out = parts[0]
+	if len(parts) > 1:
+		out = mc.polyUnite(parts, constructionHistory=False, name=name)[0]
+	tf = mc.polyListComponentConversion(out, tf=True)
+	mc.polyProjection(tf, type='Planar', md='y')
+	mc.delete(out, constructionHistory=True)
+	_wbFitUV(out)
+	mc.move(offset_x, 0.0, 0.0, out, relative=True)
+	_wbBottomPivot(out)
+	return out
+def wbMono(width=None, length=None, count=1, bevel=WB_MONO_BEVEL, spacing=WB_SPACE):
+	#build 'count' monoblock grates in a row along X
+	width = float(WB_MONO_SIZE[0] if width is None else width)
+	length = float(WB_MONO_SIZE[1] if length is None else length)
+	count = int(count)
+	if width <= 0 or length <= 0:
+		raise ValueError('monoblock size must be greater than 0.')
+	if count < 1:
+		raise ValueError('need at least 1 monoblock.')
+	bevel = float(bevel)
+	if bevel < 0 or bevel * 2.0 >= WB_MONO_BASE_H:
+		raise ValueError('monoblock bevel must be between 0 and half the frame height.')
+	token = _wbSafe('%gx%g' % (width, length), fragment=True) or 'mono'
+	made = []
+	for i in range(count):
+		nm = _wbUnique('grate_mono_' + token + '_%02d_geo')
+		made.append(_wbBuildMono(width, length, nm, i * (width + spacing), bevel))
+	mc.select(made)
+	print('weeBuild: built %d monoblock(s) at %g x %gcm, %d ribs: %s'
+		  % (count, width, length, len(_wbMonoRibs(length)), ', '.join(made)))
+	return made
+def _wbMonoBtn(width, length):
+	#a preset button builds the size written on it - never through _wbNum
+	return wbMono(width, length, count=_wbNum('gcount', 1, integer=True),
+				  bevel=_wbNum('mbevel', WB_MONO_BEVEL))
 def _wbGrateSlats(length, slat=WB_GRATE_SLAT, gap=WB_GRATE_GAP):
 	#how many slats fit in 'length', and how long each has to be for the run to come
 	#out at exactly that.  the gap is the drainage slot and is held constant across
@@ -974,11 +1084,15 @@ def wbUI():
 	_wbRow(f, [('Custom size...', wbCopingCustom, 'amber', 'build a coping at any width x length')])
 
 	f = mc.frameLayout(parent=main, label='  Grates', collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
-	_wbNums(f, [('gcount', 'Count', '1'), ('gbevel', 'Bevel', '%g' % WB_GRATE_BEVEL)])
+	_wbNums(f, [('gcount', 'Count', '1'), ('gbevel', 'Bevel', '%g' % WB_GRATE_BEVEL),
+				('mbevel', 'MonoBev', '%g' % WB_MONO_BEVEL)])
 	for i in range(0, len(WB_GRATES), 2):
 		_wbRow(f, [(_wbWrap(lbl), (lambda _w=w, _l=l: _wbGrateBtn(_w, _l)), 'indigo',
 					'build a %g x %gcm flex grate' % (w, l)) for lbl, w, l in WB_GRATES[i:i + 2]])
-	_wbRow(f, [('Custom size...', wbGrateCustom, 'amber', 'build a grate at any width x length')])
+	_wbRow(f, [('Custom size...', wbGrateCustom, 'amber', 'build a flex grate at any width x length')])
+	_wbRow(f, [(_wbWrap(lbl), (lambda _w=w, _l=l: _wbMonoBtn(_w, _l)), 'coral',
+				'build a %g x %gcm monoblock grate - solid slab, water goes round it'
+				% (w, l)) for lbl, w, l in WB_MONO])
 
 	for key, label in WB_SECTIONS:
 		f = mc.frameLayout(parent=main, label='  ' + label, collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
