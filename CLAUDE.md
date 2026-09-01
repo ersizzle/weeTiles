@@ -285,9 +285,11 @@ Regions in file order, marked with banner comments:
    - `_wbGrateSlats` holds the **gap** at 0.9 and lets the slat length absorb the
      rounding, because the slot is the functional feature. So a 50cm run is 10 slats of
      4.19, exactly 50 — the model's own 10×4.2 + 9×0.9 comes to 50.1.
-   - `_wbGrateCols` gains a column each time the span passes another `WB_GRATE_COLPITCH`.
-     Fed the model's own 24.990 it returns the model's layout exactly (3 columns, 10.0
-     apart), and 30 gives 4 — which is what the user asked for.
+   - `_wbGrateCols` uses the fewest columns that keeps every spacing at or under
+     `WB_GRATE_COLPITCH` — a **maximum** spacing (13.0), not a nominal pitch, so adding
+     a column is a decision about how far apart connectors may sit rather than a
+     rounding accident. Gives **2 / 3 / 3 / 3** across the presets, and fed the model's
+     own 24.990 it returns the model's layout exactly: 3 columns 10.0 apart.
    - **The model is named `_30_50` but measures 24.990 wide.** The user confirmed it is
      the 30 product, so `WB_GRATE_SIZE` is (30, 50). Note the model's own hardware
      spacing is what this rule produces for **25**, so treat its width with suspicion

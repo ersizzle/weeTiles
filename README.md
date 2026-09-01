@@ -271,7 +271,7 @@ hardware column running the full length:
 | --- | --- |
 | Slot | 0.9cm, held constant at every size |
 | Slat | 2.532 thick; its length takes up the rounding so the run is exact |
-| Columns | 2 at 15cm wide, 3 at 20 and 25, 4 at 30 |
+| Connectors | 2 at 15cm wide, 3 at 20, 25 and 30 — the fewest that keeps them no more than 13cm apart |
 
 A 50cm run is 10 slats of 4.19 — exactly 50. (The source model's 10 × 4.2 + 9 × 0.9
 comes to 50.1; holding the slot and flexing the slat is what makes the size come out

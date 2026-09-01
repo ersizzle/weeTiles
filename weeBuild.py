@@ -170,7 +170,7 @@ WB_GRATE_GAP = 0.9       #drainage slot between slats - fixed at every size
 WB_GRATE_THICK = 2.532   #slat height
 WB_GRATE_Y0 = -0.02      #slat underside, so it sits on the floor like the copings
 WB_GRATE_INSET = 2.495   #hardware column inset from each end of a slat
-WB_GRATE_COLPITCH = 10.0 #nominal spacing between hardware columns
+WB_GRATE_COLPITCH = 13.0 #the FURTHEST apart two connectors are allowed to be
 #the source model has TWO concentric cylinders on this axis: a 2.060 connector and a
 #0.404 core hidden inside it.  the core alone read far too thin and the 2.060 too
 #heavy, so this sits at the midpoint of the pair - the user's call, by eye in the
@@ -692,15 +692,17 @@ def _wbGrateSlats(length, slat=WB_GRATE_SLAT, gap=WB_GRATE_GAP):
 		raise ValueError('grate is too short to fit a slat.')
 	return n, z
 def _wbGrateCols(width, inset=WB_GRATE_INSET, pitch=WB_GRATE_COLPITCH):
-	#X positions of the hardware columns.  the outer two sit 'inset' in from each
-	#end and the rest spread evenly between them, gaining a column each time the
-	#span grows past another 'pitch'.  that reproduces the source model exactly at
-	#25 wide - three columns 10.0 apart - and gives four at 30.
+	#X positions of the hardware columns.  the outer two sit 'inset' in from each end
+	#and the rest spread evenly between them, using the fewest columns that keeps every
+	#spacing at or under 'pitch'.  a maximum rather than a nominal spacing, so adding a
+	#column is a decision about how far apart connectors may sit rather than a rounding
+	#accident: 2 / 3 / 3 / 3 across the four presets, and fed the model's own 24.990 it
+	#gives back the model's layout, three columns exactly 10.0 apart.
 	width = float(width)
 	span = width - 2.0 * float(inset)
 	if span <= 0:
 		return [0.0]
-	n = max(2, int(round(span / float(pitch))) + 1)
+	n = max(2, int(math.ceil(span / float(pitch))) + 1)
 	return [-width / 2.0 + float(inset) + span * i / (n - 1) for i in range(n)]
 def _wbBuildGrate(width, length, name, offset_x, bevel=WB_GRATE_BEVEL):
 	#one grate: a row of slats down Z with a fixed drainage slot between them, then

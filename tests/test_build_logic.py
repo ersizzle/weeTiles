@@ -931,8 +931,16 @@ def main():
 			check('   run is exactly %g' % L,
 				  round(gn * gz + (gn - 1) * g['WB_GRATE_GAP'], 6), L)
 		#a column each time the span grows past another pitch
-		for w, want in ((15.0, 2), (20.0, 3), (25.0, 3), (30.0, 4)):
-			check('%gcm wide -> %d hardware columns' % (w, want), len(g['_wbGrateCols'](w)), want)
+		for w, want in ((15.0, 2), (20.0, 3), (25.0, 3), (30.0, 3), (40.0, 4)):
+			check('%gcm wide -> %d connectors' % (w, want), len(g['_wbGrateCols'](w)), want)
+		#the count is whatever keeps every spacing at or under the maximum
+		for w in (15.0, 20.0, 25.0, 30.0, 40.0, 80.0):
+			c = g['_wbGrateCols'](w)
+			gaps = [round(c[i + 1] - c[i], 6) for i in range(len(c) - 1)]
+			check('%gcm: no gap over %g' % (w, g['WB_GRATE_COLPITCH']),
+				  max(gaps) <= g['WB_GRATE_COLPITCH'] + 1e-9, True)
+			check('   and it uses the fewest columns that manages that',
+				  len(c) == 2 or max(gaps) * (len(c) - 1) / float(len(c) - 2) > g['WB_GRATE_COLPITCH'], True)
 		#fed the source model's own width - 24.990, not a round 25 - the rule has to
 		#give back the model's own layout: three columns exactly 10.0 apart
 		cols = g['_wbGrateCols'](24.99)
@@ -942,9 +950,10 @@ def main():
 			  round(24.99 / 2.0 + cols[0], 3), g['WB_GRATE_INSET'])
 		check('   a round 25 shifts them by only 0.005',
 			  round(g['_wbGrateCols'](25.0)[0], 4), -10.005)
-		check('columns stay symmetric',
-			  [round(a + b, 6) for a, b in zip(g['_wbGrateCols'](30.0),
-											   reversed(g['_wbGrateCols'](30.0)))], [0.0] * 4)
+		for w in (15.0, 20.0, 25.0, 30.0, 40.0):
+			c = g['_wbGrateCols'](w)
+			check('%gcm columns are symmetric' % w,
+				  [round(a + b, 6) for a, b in zip(c, reversed(c))], [0.0] * len(c))
 
 		print('   every preset button builds the size on its label')
 		g['wbUI']()
@@ -959,7 +968,7 @@ def main():
 			check('%-14s slat %g wide' % (lbl, w), round(max(sx) - min(sx), 4), w)
 			check('%-14s slat is swept, not a box' % lbl,
 				  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], z)
-			check('%-14s %d rods' % (lbl, len(g['_wbGrateCols'](w))),
+			check('%-14s %d connectors' % (lbl, len(g['_wbGrateCols'](w))),
 				  len(rods), len(g['_wbGrateCols'](w)))
 			check('%-14s rods overhang like the model' % lbl,
 				  rods[0][2]['h'], l + 2.0 * g['WB_GRATE_ROD_OVER'])
