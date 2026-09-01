@@ -173,9 +173,15 @@ Regions in file order, marked with banner comments:
      model in `tile_models/copings/`. Keys: `pts` (the (X, Y) loop in cm), `back` (points
      at or behind this X move when the width changes), `noses` (`(side, X)` ends that a
      top projection squashes; side `1` = X ≥, `-1` = X ≤), `ribs`, `minw`, `size`.
-   - Three profiles today: **`flat`** (27 pts, 25×2.26, the only one with ribs),
-     **`overflow`** (16 pts, 25×1.20, rounded at *both* ends so it has two noses),
-     **`channel`** (42 pts, 25×1.60, a 0.75-deep channel with S-curve walls).
+   - Three profiles today: **`flat`** (27 pts, the only one with ribs), **`overflow`**
+     (16 pts, rounded at *both* ends so it has two noses), **`channel`** (42 pts, a
+     0.75-deep channel with S-curve walls).
+   - **All three models were exported on the same 25×50 footprint**, which is *not* the
+     product size in every case. `overflow` really is **33×66**, so its `size` is the
+     product size and the build stretches the flat middle to reach it. That keeps the
+     thickness at 1.20 and both arcs at R0.9650; scaling the whole profile by 33/25
+     instead would give 1.584 thick and R1.2738, breaking the radius it shares with
+     `flat`. **Check the product size before trusting a model's bounding box.**
    - **Never assume a stored winding.** The three do not agree — which way a loop runs
      depends only on how it was traced out of the source file. `_wbCCW` measures the
      signed area and orients it, because `polyCreateFacet` takes the face normal from the

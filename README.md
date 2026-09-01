@@ -227,7 +227,7 @@ are the shapes the product actually has — not an approximation.
 | Button | Profile | Notes |
 | --- | --- | --- |
 | Flat 25 x 50 | `flat` | Bullnose + finger-grip undercut, ribbed underside. Top is not level — it rises 0.66cm to the nose |
-| Overflow 25 x 50 | `overflow` | A 25 x 1.20 bar rounded at **both** top edges, exactly symmetric |
+| Overflow 33 x 66 | `overflow` | A 1.20 thick bar rounded at **both** top edges, exactly symmetric |
 | Channel 25 x 50 | `channel` | 25 x 1.60 with a channel 4.03 wide, 0.75 deep, S-curve walls |
 | Channel 30 x 50 | `channel` | The same profile widened |
 

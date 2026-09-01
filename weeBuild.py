@@ -45,7 +45,7 @@ WB_SPACE = 5.0       #gap between tiles when several are built at once
 #coping presets in panel order: (label, profile key, width cm, length cm).
 WB_COPINGS = [
 	('Flat 25 x 50', 'flat', 25.0, 50.0),
-	('Overflow 25 x 50', 'overflow', 25.0, 50.0),
+	('Overflow 33 x 66', 'overflow', 33.0, 66.0),
 	('Channel 25 x 50', 'channel', 25.0, 50.0),
 	('Channel 30 x 50', 'channel', 30.0, 50.0),
 ]
@@ -58,7 +58,8 @@ WB_COPINGS = [
 #  noses (side, X) ends that a top projection squashes, for _wbRelaxUV.  side 1
 #        means X >= that value, -1 means X <= it
 #  ribs  whether this profile has the underside ribs
-#  size  the (width, length) it was measured at
+#  size  the (width, length) to build by default.  usually the size the model was
+#        measured at, but not always - see 'overflow'
 WB_COPING_PROFILES = {
 	#the pool coping measured off flat_coping_natural.gltf.  bullnose is an exact
 	#R0.9651 arc and the grip undercut R~1.035 - do not round these decimals off.
@@ -82,10 +83,16 @@ WB_COPING_PROFILES = {
 		'minw': 20.0,
 		'size': (25.0, 50.0),
 	},
-	#linear_overflow_coping_natural: a 25 x 1.20 bar with BOTH top corners rounded,
-	#exactly symmetric about x = -6.36.  both arcs are exact quarter circles of
-	#R0.9650 - the same tooling radius as the flat coping's bullnose.  two noses,
-	#so the UV relax has to widen each end.
+	#linear_overflow_coping_natural: a bar with BOTH top corners rounded, exactly
+	#symmetric about x = -6.36.  both arcs are exact quarter circles of R0.9650 - the
+	#same tooling radius as the flat coping's bullnose.  two noses, so the UV relax
+	#has to widen each end.
+	#the MODEL measures 25 x 50 x 1.20, but the real product is 33 x 66: all three
+	#source models were exported on a shared 25 x 50 footprint.  so 'size' here is the
+	#product size, not the measured one, and the build stretches the flat middle to
+	#reach it.  that keeps the thickness at 1.20 and the arcs at R0.9650 - scaling the
+	#whole profile by 33/25 instead would give 1.584 thick and R1.2738, which would
+	#break the radius it shares with the flat coping.
 	'overflow': {
 		'pts': [
 			(-18.86, 0.01), (6.14, 0.01), (6.14, 0.245),
@@ -99,7 +106,7 @@ WB_COPING_PROFILES = {
 		'noses': [(1, 5.175), (-1, -17.895)],
 		'ribs': False,
 		'minw': 8.0,
-		'size': (25.0, 50.0),
+		'size': (33.0, 66.0),
 	},
 	#coping_natural: 25 x 1.60, with a channel 4.03 wide at the top narrowing to
 	#1.97 at the floor, 0.75 deep, S-curve walls symmetric about x = 0.44.  unlike

@@ -37,6 +37,11 @@ class StubMC(object):
 		#which is how we check the relax pivot does not depend on Maya's U direction.
 		self.uvCount = 20
 		self.uvFlip = False
+		#the X span the stub's verts cover.  defaults to the 25cm the profiles were
+		#measured at; a test building a wider coping must widen this too, or the nose
+		#thresholds land outside the stub's verts and nothing gets selected
+		self.uvXMin = -18.86
+		self.uvXSpan = 25.0
 		self.uvBB = ((0.0, 1.0), (0.0, 1.0))   #what polyEvaluate(bb2) reports
 		self.promptButton = ''                 #what promptDialog returns
 		self.promptText = ''                   #and what it says when queried
@@ -94,7 +99,7 @@ class StubMC(object):
 		c = comp if isinstance(comp, str) else comp[0]
 		if kw.get('fuv') and kw.get('tv'):
 			#the vert this UV belongs to, with its X baked into the name
-			return ['%s|x%g' % (c, -18.86 + self._uvFrac(c) * 25.0)]
+			return ['%s|x%g' % (c, self.uvXMin + self._uvFrac(c) * self.uvXSpan)]
 		if kw.get('fe') and kw.get('tv'):
 			#an edge's two verts, with their Z baked into the name for pointPosition
 			m = re.search(r'\.e\[(\d+)\]', c)
@@ -723,16 +728,20 @@ def main():
 		print('\n[18] all three coping profiles')
 		P = g['WB_COPING_PROFILES']
 		check('three profiles', sorted(P), ['channel', 'flat', 'overflow'])
-		facts = {'flat': (27, 25.0, 2.2591), 'overflow': (16, 25.0, 1.2),
-				 'channel': (42, 25.0, 1.6)}
-		for kind, (npt, w, h) in sorted(facts.items()):
+		#(points, measured width, measured thickness, default build size).  the overflow
+		#model was exported on the same 25 x 50 footprint as the others, but the real
+		#product is 33 x 66 - so its default size is NOT what it was measured at
+		facts = {'flat': (27, 25.0, 2.2591, (25.0, 50.0)),
+				 'overflow': (16, 25.0, 1.2, (33.0, 66.0)),
+				 'channel': (42, 25.0, 1.6, (25.0, 50.0))}
+		for kind, (npt, w, h, size) in sorted(facts.items()):
 			pts = P[kind]['pts']
 			xs = [x for x, _y in pts]
 			ys = [y for _x, y in pts]
 			check('%-8s %d points' % (kind, npt), len(pts), npt)
 			check('%-8s %g x %g cm' % (kind, w, h),
 				  (round(max(xs) - min(xs), 4), round(max(ys) - min(ys), 4)), (w, h))
-			check('%-8s measured size' % kind, P[kind]['size'], (25.0, 50.0))
+			check('%-8s builds %gx%g by default' % ((kind,) + size), P[kind]['size'], size)
 
 		#the stored profiles do NOT agree on winding - which is exactly why the build
 		#orients them itself rather than reversing unconditionally
@@ -769,7 +778,9 @@ def main():
 		for kind, npt, ribs in (('flat', 27, True), ('overflow', 16, False), ('channel', 42, False)):
 			mc.calls = []
 			made = g['wbCoping'](kind)
-			check('%-8s builds' % kind, made[0].startswith('coping_%s_25x50_' % kind), True)
+			w, l = facts[kind][3]
+			check('%-8s builds' % kind,
+				  made[0].startswith('coping_%s_%s_' % (kind, g['_wbSafe']('%gx%g' % (w, l), fragment=True))), True)
 			check('%-8s %d point facet' % (kind, npt),
 				  len(mc.find('polyCreateFacet')[0][2]['p']), npt)
 			check('%-8s ribs %s by default' % (kind, ribs), bool(mc.find('polyCube')), ribs)
@@ -781,10 +792,14 @@ def main():
 					- min(p[0] for p in mc.find('polyCreateFacet')[0][2]['p']), 4), 30.0)
 
 		#two noses -> two relax calls, one per end
+		#the overflow bar defaults to 33 wide, so the stub's verts have to span that or
+		#its left nose threshold falls outside them
+		mc.uvXMin, mc.uvXSpan = -26.86, 33.0
 		mc.calls = []
 		g['wbCoping']('overflow')
 		check('overflow relaxes both ends',
 			  len([c for c in mc.find('polyEditUV') if c[2].get('scaleU') == 2.0]), 2)
+		mc.uvXMin, mc.uvXSpan = -18.86, 25.0
 		mc.calls = []
 		g['wbCoping']('channel')
 		check('channel relaxes one end',
@@ -866,6 +881,36 @@ def main():
 				check('"%s" rejected (%s)' % (bad, why), True, True)
 		mc.promptButton = ''
 		mc.promptText = ''
+
+		print('\n[21] the overflow bar at its real 33 x 66')
+		#the model was exported on the same 25 x 50 footprint as the other two, but the
+		#product is 33 x 66.  widening stretches the flat middle, so the thickness and
+		#both R0.9650 arcs survive - scaling the whole profile by 33/25 instead would
+		#give 1.584 thick and R1.2738, breaking the radius shared with the flat coping.
+		base = g['WB_COPING_PROFILES']['overflow']['pts']
+		wide = g['_wbCopingProfile']('overflow', 33.0)
+		moved = [(a, b) for a, b in zip(base, wide) if a != b]
+		check('half the points move', (len(moved), len(base) - len(moved)), (8, 8))
+		check('each moves exactly -8 in X',
+			  all(abs((b[0] - a[0]) + 8.0) < 1e-9 for a, b in moved), True)
+		check('no Y changes at all', all(a[1] == b[1] for a, b in zip(base, wide)), True)
+		check('thickness stays 1.2',
+			  round(max(y for _x, y in wide) - min(y for _x, y in wide), 4), 1.2)
+		check('width is exactly 33',
+			  round(max(x for x, _y in wide) - min(x for x, _y in wide), 4), 33.0)
+		for nm, pts in (('right', [q for q in wide if q[0] >= 5.17 and q[1] >= 0.24]),
+						('left', [q for q in wide if q[0] <= -25.89 and q[1] >= 0.24])):
+			_cx, _cy, r, dev = fitcirc(pts)
+			check('%s arc still R0.9650' % nm, round(r, 4), 0.965)
+			check('   and still an exact arc', dev < 1e-4, True)
+		check('both noses move with the points',
+			  g['_wbCopingNoses']('overflow', 33.0), [(1, 5.175), (-1, -25.895)])
+		mc.calls = []
+		made = g['wbCoping']('overflow')
+		check('the default build is 33 x 66',
+			  made[0].startswith('coping_overflow_33x66_'), True)
+		check('   swept 66 along Z',
+			  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], 66.0)
 
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
