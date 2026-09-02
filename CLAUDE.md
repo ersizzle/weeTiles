@@ -184,6 +184,25 @@ Regions in file order, marked with banner comments:
      fill-the-square fit — these have to sit in the same texture grid as the deck.
    - The site's own size list (5×5, 10×10, 11×33, 16.5×16.5, 16.5×66, 33×33, 33×66)
      matches `WB_TILES` exactly, which is a useful check on those presets.
+3c. **İç / Dış Bükey trim** — `_wbBukeyProfile` is pure; `_wbBuildBukey` sweeps it like a
+   coping. Presets in `WB_BUKEY`, sections in `WB_BUKEY_PROFILES`.
+   - **These came from technical drawings, not a model** — the first thing here to do
+     so. `tile_models/technical/*.pdf` are vector CAD, so the stored points are the
+     drawing's own coordinates: inflate the content stream with `zlib`, walk the path
+     operators, flatten the Beziers. No PDF library is installed and none is needed.
+   - **Scale came from the top view**: 4627 units = 3.98cm and 37774 = 32.5cm, which
+     agree to 0.03%. Two independent confirmations, so the scale is not a guess.
+   - The concave face is an exact **R2.667** arc (chord 3.9633, 0.8819 deep) and the
+     convex an exact **R2.949** (chord 4.0166, 0.7897 high) — circle fits deviate 1e-05
+     and 3e-04 against the drawing's own Bezier data.
+   - The convex side view is drawn **1.7% large**. Normalising its width to the stated
+     3.98 lands the height on exactly 1.4003, which is what says the scaling is right
+     rather than a fudge. The concave view is at true scale and is genuinely 1.45 tall,
+     not 1.4 — the drawing's “1,4” is 0.9 + 0.5 measured across the section, not the
+     bounding height.
+   - Stored **simplified to 0.004cm** (Douglas-Peucker), which moves the section area
+     by under 0.3%. Check `[29]` pins the **area** rather than refitting the arcs:
+     refitting a simplified polyline measures the simplification, not the shape.
 4. **copings** — `_wbCopingProfile`/`_wbCopingNoses`/`_wbCopingRibs`/`_wbArea`/`_wbCCW`
    are **pure, no Maya**, so they are unit-testable like weeTiles' `_wtLayout`.
    `_wbBuildCoping` sweeps the profile with `polyCreateFacet` →

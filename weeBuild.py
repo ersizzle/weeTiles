@@ -58,6 +58,66 @@ WB_INF_SIZE = (33.0, 66.0)     #(short, long) in cm, as the site lists it
 WB_INF_THICK = (0.76, 1.80)
 WB_INF_SEG = 8                 #segments in the bullnose half round
 
+#Ic Bukey / Dis Bukey trim, 4x33.  measured off the technical drawings in
+#tile_models/technical/ - the PDFs are vector CAD, so these are the drawing's own
+#coordinates, not a fit to a picture: the content stream was inflated and the Bezier
+#paths flattened.  scale came from the top view, 4627 units = 3.98cm and 37774 = 32.5,
+#which agree to 0.03%.  the concave face is an exact R2.667 arc and the convex an exact
+#R2.949 (circle fits deviate 1e-05 and 3e-04).  simplified to 0.004cm, which moves the
+#section area by under 0.3%.
+WB_BUKEY = [
+	('Ic Bukey 4 x 33', 'concave'),
+	('Dis Bukey 4 x 33', 'convex'),
+]
+WB_BUKEY_LEN = 32.5      #the drawings' own length; 4x33 is the nominal name
+WB_BUKEY_PROFILES = {
+	#the cove piece: a curved strip, concave face uppermost, 3.98 x 1.45 in
+	#section.  its face is an R2.667 arc, chord 3.9633 and 0.8819 deep.
+	'concave': [
+		(0.0086, 0.8818), (0.208, 0.6828), (0.4253, 0.5072),
+		(0.6586, 0.3561), (0.9056, 0.2304), (1.1644, 0.131),
+		(1.4328, 0.0588), (1.7087, 0.0149), (1.99, 0.0),
+		(2.2713, 0.0149), (2.5472, 0.0588), (2.8156, 0.131),
+		(3.0744, 0.2304), (3.3214, 0.3561), (3.5547, 0.5072),
+		(3.772, 0.6828), (3.9714, 0.8818), (3.9614, 0.9422),
+		(3.9187, 1.0074), (3.8107, 1.1535), (3.7089, 1.2713),
+		(3.5604, 1.4151), (3.5054, 1.4415), (3.4463, 1.4502),
+		(3.3871, 1.4415), (3.3426, 1.4217), (3.1159, 1.2469),
+		(3.0126, 1.1809), (2.9065, 1.1219), (2.6865, 1.0247),
+		(2.5734, 0.9865), (2.3427, 0.931), (2.2257, 0.9136),
+		(1.99, 0.8997), (1.7543, 0.9136), (1.6373, 0.931),
+		(1.4066, 0.9865), (1.2935, 1.0247), (1.0735, 1.1219),
+		(0.9674, 1.1809), (0.8641, 1.2469), (0.6266, 1.4277),
+		(0.5695, 1.4471), (0.498, 1.4471), (0.4408, 1.4277),
+		(0.3997, 1.3996), (0.2192, 1.2133), (0.1216, 1.092),
+		(0.0186, 0.9422), (0.0049, 0.9201),
+	],
+	#the bullnose piece: 3.98 x 1.40 in section, face an R2.949 arc, chord
+	#4.0166 and 0.7897 high.  the side view was drawn 1.7% large, so it is
+	#normalised to the stated 3.98 width - which lands the height on 1.4003.
+	'convex': [
+		(0.6803, 0.0111), (0.7762, 0.0892), (0.9779, 0.225),
+		(1.1911, 0.3337), (1.3012, 0.3778), (1.4131, 0.4152),
+		(1.6415, 0.4695), (1.7573, 0.4865), (1.9904, 0.5),
+		(2.2236, 0.4865), (2.3393, 0.4695), (2.5677, 0.4152),
+		(2.7897, 0.3337), (2.8976, 0.2827), (3.1054, 0.1605),
+		(3.2047, 0.0892), (3.6186, 0.02), (3.6956, 0.0705),
+		(3.7647, 0.1298), (3.8438, 0.2209), (3.8924, 0.2971),
+		(3.9418, 0.4072), (3.9666, 0.4952), (3.9769, 0.5559),
+		(3.9656, 0.6237), (3.8233, 0.7477), (3.6753, 0.861),
+		(3.5219, 0.9634), (3.3637, 1.0551), (3.2013, 1.136),
+		(3.0353, 1.2061), (2.866, 1.2654), (2.694, 1.314),
+		(2.52, 1.3517), (2.3444, 1.3787), (2.1677, 1.3949),
+		(1.9904, 1.4003), (1.8132, 1.3949), (1.6365, 1.3787),
+		(1.4609, 1.3517), (1.2868, 1.314), (1.1149, 1.2654),
+		(0.9456, 1.2061), (0.7795, 1.136), (0.6171, 1.0551),
+		(0.459, 0.9634), (0.3056, 0.861), (0.1575, 0.7477),
+		(0.0153, 0.6237), (0.0031, 0.5559), (0.0076, 0.5254),
+		(0.0287, 0.4361), (0.0606, 0.351), (0.1362, 0.2209),
+		(0.2374, 0.1092), (0.3614, 0.02),
+	],
+}
+
 #coping presets in panel order: (label, profile key, width cm, length cm).
 WB_COPINGS = [
 	('Flat 25 x 50', 'flat', 25.0, 50.0),
@@ -542,6 +602,63 @@ def wbTileCustom():
 #  copings - a measured profile swept along Z, with the underside ribs merged in
 ##############################################################################
 
+def _wbBukeyProfile(kind):
+	p = WB_BUKEY_PROFILES.get(kind)
+	if not p:
+		raise ValueError('unknown bukey profile "%s" - have %s.'
+						 % (kind, ', '.join(sorted(WB_BUKEY_PROFILES))))
+	return [tuple(q) for q in p]
+def _wbBuildBukey(kind, length, name, offset_x, bevel=WB_COPING_BEVEL):
+	#swept exactly like a coping: the drawing's own section, extruded down the length,
+	#capped, and the cut ends chamfered.
+	length = float(length)
+	prof = _wbBukeyProfile(kind)
+	pts = [(x, y, 0.0) for x, y in _wbCCW(prof)]
+	body = mc.polyCreateFacet(p=pts, name=name)[0]
+	mc.polyExtrudeFacet(body + '.f[0]', constructionHistory=True, keepFacesTogether=True,
+						localTranslateZ=length)
+	mc.delete(body, constructionHistory=True)
+	try:
+		mc.polyCloseBorder(body, constructionHistory=False)
+	except Exception:
+		pass
+	if bevel > 0:
+		edges = _wbCapEdges(body, length)
+		if edges:
+			mc.polyBevel3(edges, offset=bevel, offsetAsFraction=True, segments=1, depth=1,
+						  worldSpace=True, autoFit=True, mergeVertices=True, smoothingAngle=30)
+			mc.delete(body, constructionHistory=True)
+	tf = mc.polyListComponentConversion(body, tf=True)
+	mc.polyProjection(tf, type='Planar', md='y')
+	mc.delete(body, constructionHistory=True)
+	_wbFitUV(body)
+	bb = mc.xform(body, q=True, ws=True, bb=True)
+	mc.move(offset_x - (bb[0] + bb[3]) / 2.0, 0.0, -(bb[2] + bb[5]) / 2.0, body, relative=True)
+	_wbBottomPivot(body)
+	return body
+def wbBukey(kind='concave', length=None, count=1, bevel=WB_COPING_BEVEL, spacing=WB_SPACE):
+	#build 'count' ic/dis bukey trims in a row along X
+	length = float(WB_BUKEY_LEN if length is None else length)
+	count = int(count)
+	_wbBukeyProfile(kind)
+	if length <= 0:
+		raise ValueError('bukey length must be greater than 0.')
+	if count < 1:
+		raise ValueError('need at least 1 piece.')
+	bevel = float(bevel)
+	if bevel < 0 or bevel >= 0.5:
+		raise ValueError('bukey bevel is a fraction - it must be 0 or more and under 0.5.')
+	token = _wbSafe('%gx%g' % (4.0, length), fragment=True) or 'bukey'
+	made = []
+	for i in range(count):
+		nm = _wbUnique('trim_' + _wbSafe(kind, fragment=True) + '_' + token + '_%02d_geo')
+		made.append(_wbBuildBukey(kind, length, nm, i * 8.0, bevel))
+	mc.select(made)
+	print('weeBuild: built %d %s bukey at 4 x %gcm: %s' % (count, kind, length, ', '.join(made)))
+	return made
+def _wbBukeyBtn(kind):
+	return wbBukey(kind, count=_wbNum('ccount', 1, integer=True),
+				   bevel=_wbNum('cbevel', WB_COPING_BEVEL))
 def _wbCopingSpec(kind):
 	s = WB_COPING_PROFILES.get(kind)
 	if not s:
@@ -1391,6 +1508,9 @@ def wbUI():
 					'build the %s coping profile at %g x %gcm' % (k, w, l))
 				   for lbl, k, w, l in WB_COPINGS[i:i + 2]])
 	_wbRow(f, [('Custom size...', wbCopingCustom, 'amber', 'build a coping at any width x length')])
+	_wbRow(f, [(_wbWrap(lbl), (lambda _k=k: _wbBukeyBtn(_k)), 'purple',
+				'build the %s trim, 4 x %gcm, swept from its technical drawing'
+				% (k, WB_BUKEY_LEN)) for lbl, k in WB_BUKEY])
 
 	f = mc.frameLayout(parent=main, label='  Grates', collapsable=True, collapse=False, marginHeight=2, backgroundColor=[0.2, 0.2, 0.2])
 	_wbNums(f, [('gcount', 'Count', '1'), ('gbevel', 'Bevel', '%g' % WB_GRATE_BEVEL),

@@ -1350,6 +1350,60 @@ def main():
 			except ValueError:
 				check('%s rejected' % why, True, True)
 
+		print('\n[29] Ic / Dis Bukey trim, from the technical drawings')
+		check('two profiles', sorted(g['WB_BUKEY_PROFILES']), ['concave', 'convex'])
+		check('two buttons', [q[0] for q in g['WB_BUKEY']],
+			  ['Ic Bukey 4 x 33', 'Dis Bukey 4 x 33'])
+		check('the drawings\' own length', g['WB_BUKEY_LEN'], 32.5)
+		facts = {'concave': (3.9665, 1.4502), 'convex': (3.9738, 1.3892)}
+		for kind, (w, h) in sorted(facts.items()):
+			pr = g['_wbBukeyProfile'](kind)
+			xs = [q[0] for q in pr]
+			ys = [q[1] for q in pr]
+			check('%-8s %g x %g cm' % (kind, w, h),
+				  (round(max(xs) - min(xs), 4), round(max(ys) - min(ys), 4)), (w, h))
+			check('   %s is a real section' % kind, len(pr) > 30, True)
+			check('   and a closed simple loop', pr[0] != pr[-1], True)
+		#the faces are the arcs the drawings dimension: R2.667 concave, R2.949 convex
+		#the arc radii (R2.667 concave, R2.949 convex) were fitted off the drawing's own
+		#Bezier data during extraction and are recorded in the source comment.  refitting
+		#a SIMPLIFIED polyline here would just measure the simplification, so what is
+		#pinned instead is the section area - an integral check on the whole shape that
+		#moves if any point drifts.
+		cc = g['_wbBukeyProfile']('concave')
+		cv = g['_wbBukeyProfile']('convex')
+		for kind, pr, want in (('concave', cc, 3.4067), ('convex', cv, 3.5148)):
+			n = len(pr)
+			ar = abs(sum(pr[i][0] * pr[(i + 1) % n][1] - pr[(i + 1) % n][0] * pr[i][1]
+						 for i in range(n)) / 2.0)
+			check('%-8s section area %g' % (kind, want), round(ar, 4), want)
+		check('concave sits on the floor', round(min(q[1] for q in cc), 4), 0.0)
+		check('convex sits just above it', round(min(q[1] for q in cv), 4), 0.0111)
+		#the two are genuinely different shapes, not one flipped
+		check('they are not the same profile', cc != cv, True)
+		check('   concave is the deeper section',
+			  max(q[1] for q in cc) > max(q[1] for q in cv), True)
+
+		print('   both buttons build')
+		g['wbUI']()
+		for lbl, kind in g['WB_BUKEY']:
+			mc.calls = []
+			made = g['_wbBukeyBtn'](kind)
+			check('%-18s swept %g' % (lbl, g['WB_BUKEY_LEN']),
+				  mc.find('polyExtrudeFacet')[0][2]['localTranslateZ'], g['WB_BUKEY_LEN'])
+			check('%-18s facet has the whole section' % lbl,
+				  len(mc.find('polyCreateFacet')[0][2]['p']), len(g['_wbBukeyProfile'](kind)))
+			check('%-18s cut ends chamfered' % lbl, bool(mc.find('polyBevel3')), True)
+			check('%-18s named for its shape' % lbl,
+				  made[0].startswith('trim_%s_' % kind), True)
+		for kw, why in (({'kind': 'nope'}, 'unknown profile'), ({'count': 0}, 'zero count'),
+						({'length': 0}, 'zero length'), ({'bevel': 0.9}, 'bevel past a half')):
+			try:
+				g['wbBukey'](**kw)
+				check('%s rejected' % why, False, True)
+			except ValueError:
+				check('%s rejected' % why, True, True)
+
 	finally:
 		shutil.rmtree(tmp, ignore_errors=True)
 

@@ -238,6 +238,17 @@ two things to change.
 
 Named `tile_infinity_cift_33x66_0p76_<nn>_geo`.
 
+## Ic / Dis Bukey trim
+
+Two buttons in the Copings section: **Ic Bukey 4 x 33** (the cove) and **Dis Bukey
+4 x 33** (the bullnose), swept from their technical drawings.
+
+These are the only pieces here built from **drawings** rather than a 3D model. The PDFs
+in `tile_models/technical/` are vector CAD, so the sections are the drawing's own
+coordinates - the concave face is an R2.667 arc, the convex an R2.949, both exact.
+
+Named `trim_concave_4x32p5_<nn>_geo` / `trim_convex_...`.
+
 ## Copings
 
 Built procedurally, not imported. Each profile is the real swept cross-section measured
